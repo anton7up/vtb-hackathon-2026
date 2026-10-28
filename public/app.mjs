@@ -1,4 +1,5 @@
 // Roles, balances, operations and permissions come exclusively from the server.
+import { needsAssistantReview, reviewGreeting, reviewStatus } from './review-assistant.mjs';
 async function api(path, body) {
   const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
   const data = await response.json();
@@ -40,7 +41,7 @@ let wasActive = protectionOf(state, now()).active;
 let baseRegistry = null;
 let registryStatus = 'loading';
 const ui = { role: account.role, page: 'transfer', kind: 'transfer', recipient: 'DEMO-FAMILY-001', amount: '3 000', customId: '', customName: '', answers: {}, filter: 'all' };
-Object.assign(ui, { aiConversationId: state.aiConversations?.[0]?.id || null, aiOperationId: '', aiDraft: '', aiConsent: false, aiBusy: false, aiRequestId: null });
+Object.assign(ui, { aiConversationId: state.aiConversations?.[0]?.id || null, aiOperationId: '', aiDraft: '', aiConsent: false, aiBusy: false, aiRequestId: null, aiModalOperationId: null });
 if (ui.role === 'employee') ui.page = 'cases';
 const registry = () => baseRegistry;
 const allRecipients = () => state.recipients;
@@ -52,11 +53,13 @@ async function action(name, data = {}) {
 }
 let toastTimer;
 function toast(text) { $('#toast').textContent = text; $('#toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 4300); }
-function showDialog(title, content, symbol = 'shield', tone = '') {
+function showDialog(title, content, symbol = 'shield', tone = '', assistantMode = false) {
+  if (!assistantMode) ui.aiModalOperationId = null;
+  $('#dialog').classList.toggle('assistant-dialog', assistantMode);
   $('#dialog-content').innerHTML = `<div class="dialog-inner"><button type="button" class="dialog-close" aria-label="Закрыть окно" data-close>×</button><div class="dialog-symbol ${tone}">${icon(symbol)}</div><h2 id="dialog-title">${esc(title)}</h2>${content}</div>`;
   if (!$('#dialog').open) $('#dialog').showModal();
 }
-const closeDialog = () => $('#dialog').close();
+const closeDialog = () => { ui.aiModalOperationId = null; $('#dialog').close(); };
 function renderBanner() {
   const hold = protectionOf(state, now());
   const banner = $('#protection-banner');
@@ -123,6 +126,7 @@ function render() {
   if (state.securityLock && $('.balance-bottom span')) $('.balance-bottom span').textContent = 'Демо-баланс · списания заблокированы';
   if (ui.page === 'security' && !state.securityLock) $('#workspace').insertAdjacentHTML('afterbegin', '<p class="notice">Предупреждение «Это был не я» отображается только в старых сессиях — открытых до нового входа или изменения данных. В сессии, совершившей действие, кнопки нет.</p>');
   updateRecipientInfo();
+  if (ui.aiModalOperationId && $('#dialog').open) renderAssistantDialog();
 }
 function balanceCard() { return `<div class="panel balance-card"><div class="balance-top"><span>Мастер-счёт · RUB</span><span class="mini-shield">${icon('shield')} Защищён</span></div><strong id="balance">${money(state.balance)}</strong><div class="balance-bottom"><span>Доступный демо-баланс</span><b>•• 4812</b></div></div>`; }
 function policyView() {
@@ -142,6 +146,27 @@ function aiAssessmentView(a) {
 }
 function aiTurnsView(c) {
   return c.turns.map(t => `<div class="ai-message user"><b>Клиент</b><p>${esc(t.message)}</p></div><div class="ai-message bot"><b>ИИ-помощник</b>${t.status === 'processing' ? '<p role="status">Анализируем объяснение… Если ответ не появился, обновите страницу или начните новый диалог через минуту.</p>' : t.error ? `<p class="dialog-error">${esc(t.error)}</p>` : `${aiAssessmentView(t.response)}${t.response?.next_question ? `<p class="ai-question">${esc(t.response.next_question)}</p>` : ''}`}</div>`).join('');
+}
+function openAssistantDialog(operation) {
+  if (account.role !== 'client' || !needsAssistantReview(operation)) return;
+  if (ui.aiBusy) { toast('Дождитесь завершения текущей ИИ-проверки'); return; }
+  ui.aiModalOperationId = operation.id;
+  ui.aiOperationId = operation.id;
+  ui.aiConversationId = state.aiConversations?.find(c => c.operationId === operation.id)?.id || null;
+  ui.aiDraft = ''; ui.aiRequestId = null; ui.aiConsent = false;
+  // Only one chat form may exist: the modal replaces the standalone assistant surface.
+  if (ui.page === 'assistant') ui.page = 'transfer';
+  render();
+  renderAssistantDialog();
+}
+function renderAssistantDialog() {
+  const op = state.operations.find(o => o.id === ui.aiModalOperationId);
+  const status = reviewStatus(op);
+  const c = state.aiConversations?.find(c => c.id === ui.aiConversationId && c.operationId === ui.aiModalOperationId);
+  const finished = c?.status === 'complete', processing = ui.aiBusy || c?.status === 'processing';
+  const tone = op?.status === 'blocked' ? 'red' : op?.review?.status === 'approved' ? 'green' : 'amber';
+  const form = status.canChat && !finished ? `<form id="ai-chat-form"><label class="field-label" for="ai-message">Ваш ответ помощнику</label><textarea id="ai-message" maxlength="1200" required placeholder="Опишите цель перевода и кто его предложил" ${processing ? 'disabled' : ''}>${esc(ui.aiDraft)}</textarea><label class="ai-consent"><input type="checkbox" id="ai-consent" ${ui.aiConsent ? 'checked' : ''} required ${processing ? 'disabled' : ''}><span>Согласен отправить текст в Groq для анализа и сохранить диалог для сотрудника банка. Использую только вымышленные данные.</span></label><button type="submit" class="button full" ${processing || !assistantConfig?.configured ? 'disabled' : ''}>${processing ? 'Ждём ответ модели…' : 'Отправить ответ'}</button></form>` : '';
+  showDialog(status.title, `<p class="review-lead">${esc(status.text)}</p>${op ? `<div class="dialog-facts"><div><span>Операция</span><b>${esc(op.id)}</b></div><div><span>Получатель</span><b>${esc(op.recipientName)}</b></div><div><span>Сумма</span><b>${money(op.amount)}</b></div></div>` : ''}<div class="review-chat"><div class="section-head"><h3>ИИ-помощник службы безопасности</h3><span class="pill blue">Qwen · Groq</span></div><div class="ai-message bot"><b>Проверка обстоятельств перевода</b><p>${esc(reviewGreeting(account.name))}</p></div>${c ? aiTurnsView(c) : ''}</div>${status.canChat && finished ? '<p class="notice">Ответы приняты и доступны сотруднику банка. Ожидайте его решения. Ответ ИИ сам по себе не разрешает перевод и не снимает ограничения.</p>' : ''}${status.canChat && !assistantConfig?.configured ? '<p class="notice error">ИИ-помощник временно недоступен. Обратитесь в банк; перевод не разрешён автоматически.</p>' : ''}${form ? `<details class="review-privacy"><summary>Об обработке данных и ограничениях ИИ</summary><p>Текст будет передан внешнему ИИ-сервису Groq. Модель может ошибаться. Не вводите ФИО, телефоны, реквизиты, пароли или SMS-коды. Скрытие данных не гарантирует полную анонимность. Деньги помощник не отправляет.</p></details>${form}` : ''}<div class="dialog-actions">${op?.review?.status === 'approved' && needsAssistantReview(op) ? `<button type="button" class="button" data-resume-reviewed="${esc(op.id)}">Продолжить подтверждение</button>` : ''}${op && op.status !== 'completed' ? `<button type="button" class="button secondary" data-support="${esc(op.id)}">Обратиться в банк</button>` : ''}<button type="button" class="button subtle" data-close>Закрыть окно</button></div><p class="field-help">Закрытие окна не отменяет проверку и не отправляет деньги. Вернуться к диалогу можно из карточки операции.</p>`, 'lock', tone, true);
 }
 function assistantView() {
   const c = state.aiConversations?.find(c => c.id === ui.aiConversationId);
@@ -211,6 +236,7 @@ function phoneDialog() {
   showDialog('Сменить номер телефона', `<p>Переводы новым получателям и снятие наличных будут недоступны 24 часа. Прежние получатели останутся доступны после проверки.</p><form id="phone-form"><label class="field-label" for="new-phone">Новый демонстрационный номер</label><input id="new-phone" required inputmode="tel" maxlength="25" value="${state.phone === '+7 000 000-00-02' ? '+7 000 000-00-03' : '+7 000 000-00-02'}"><p class="field-help">Используйте вымышленные данные. Никаких SMS не отправляется.</p><p id="phone-error" class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle" data-close>Отмена</button><button class="button" type="submit">Сохранить номер</button></div></form>`, 'phone');
 }
 function decisionDialog(decision, request, operation, readOnly = false) {
+  if (account.role === 'client' && needsAssistantReview(operation)) { openAssistantDialog(operation); return; }
   const completed = operation?.status === 'completed';
   const title = completed ? (request.kind === 'cash' ? 'Наличные выданы в демо' : 'Перевод выполнен') : decision.code === 'RISK_REGISTRY' ? 'Получатель в демо-реестре' : decision.code === 'REGISTRY_UNAVAILABLE' ? 'Проверка не завершена' : 'Операция остановлена';
   showDialog(title, `<p>${esc(completed ? operation.reason : decision.reason)}</p><div class="dialog-facts"><div><span>${request.kind === 'cash' ? 'Операция' : 'Получатель'}</span><b>${esc(request.recipientName)}</b></div><div><span>Сумма</span><b>${money(request.amount)}</b></div>${!completed && decision.endsAt && ['CASH_HOLD', 'NEW_RECIPIENT_HOLD'].includes(decision.code) ? `<div><span>Пауза до</span><b>${date(decision.endsAt)} МСК</b></div>` : ''}${decision.registryReason ? `<div><span>Основание</span><b>${esc(decision.registryReason)}</b></div>` : ''}</div><p>${completed ? `Остаток: ${money(state.balance)}.` : 'Деньги не списаны. Операция не будет выполнена автоматически.'}</p><div class="dialog-actions">${operation && !completed && ui.role === 'client' ? `<button type="button" class="button secondary" data-support="${esc(operation.id)}">Обратиться в банк</button>` : ''}<button type="button" class="button" data-close>${completed ? 'Готово' : readOnly ? 'Закрыть' : 'Понятно'}</button></div>`, completed ? 'check' : 'lock', completed ? 'green' : decision.code === 'RISK_REGISTRY' ? 'red' : 'amber');
@@ -236,7 +262,7 @@ document.addEventListener('click', async e => {
   try {
     if (b.hasAttribute('data-close')) { closeDialog(); return; }
     if (b.id === 'logout') { await api('/api/auth/logout', {}); location.replace('/login'); return; }
-    if (b.dataset.aiOperation) { closeDialog(); ui.page = 'assistant'; ui.aiConversationId = null; ui.aiOperationId = b.dataset.aiOperation; ui.aiDraft = ''; ui.aiRequestId = null; render(); }
+    if (b.dataset.aiOperation) { const op = state.operations.find(o => o.id === b.dataset.aiOperation); openAssistantDialog(op); return; }
     if (b.dataset.aiConversation) { ui.page = 'assistant'; ui.aiConversationId = b.dataset.aiConversation; ui.aiDraft = ''; ui.aiRequestId = null; render(); }
     if (b.id === 'ai-new') { ui.aiConversationId = null; ui.aiOperationId = ''; ui.aiDraft = ''; ui.aiRequestId = null; render(); }
     if (b.dataset.resumeReviewed) {
@@ -342,7 +368,7 @@ async function loadRegistry(redraw = true) {
   } catch { baseRegistry = null; registryStatus = 'error'; }
   if (redraw) render();
 }
-$('#dialog').addEventListener('close', () => { pendingRequest = null; });
+$('#dialog').addEventListener('close', () => { pendingRequest = null; ui.aiModalOperationId = null; $('#dialog').classList.remove('assistant-dialog'); });
 render(); if (account.role === 'employee') loadRegistry();
 $('#logout').disabled = false;
 setInterval(() => { const active = protectionOf(state, now()).active; if (active !== wasActive) { wasActive = active; render(); } else tick(); }, 1000);
