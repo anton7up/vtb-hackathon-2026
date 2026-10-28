@@ -9,7 +9,7 @@ async function api(path, body) {
 const { user: account } = await api('/api/auth/me');
 const landing = account.role === 'employee' ? '/employee' : '/client';
 if (location.pathname !== landing) location.replace(landing);
-let { state } = await api('/api/state');
+let { state, assistant: assistantConfig } = await api('/api/state');
 let receivedAt = Date.now();
 const now = () => state.serverNow + Date.now() - receivedAt;
 const protectionOf = (_state, at) => { const endsAt = state.protection.endsAt; return { endsAt, active: endsAt !== null && at < endsAt, remainingMs: endsAt === null ? 0 : Math.max(0, endsAt - at) }; };
@@ -40,6 +40,7 @@ let wasActive = protectionOf(state, now()).active;
 let baseRegistry = null;
 let registryStatus = 'loading';
 const ui = { role: account.role, page: 'transfer', kind: 'transfer', recipient: 'DEMO-FAMILY-001', amount: '3 000', customId: '', customName: '', answers: {}, filter: 'all' };
+Object.assign(ui, { aiConversationId: state.aiConversations?.[0]?.id || null, aiOperationId: '', aiDraft: '', aiConsent: false, aiBusy: false, aiRequestId: null });
 if (ui.role === 'employee') ui.page = 'cases';
 const registry = () => baseRegistry;
 const allRecipients = () => state.recipients;
@@ -89,11 +90,12 @@ function tick() {
   if ($('#demo-clock')) $('#demo-clock').textContent = `${date(now())} МСК · серверное время демо`;
 }
 const navItems = {
-  client: [['transfer', 'transfer', 'Переводы'], ['security', 'lock', 'Безопасность'], ['history', 'history', 'История']],
+  client: [['transfer', 'transfer', 'Переводы'], ['assistant', 'message', 'ИИ-помощник'], ['security', 'lock', 'Безопасность'], ['history', 'history', 'История']],
   employee: [['cases', 'shield', 'Операции'], ['registry', 'list', 'Реестр'], ['events', 'history', 'Журнал']]
 };
 const titles = {
   transfer: ['Переводы и наличные', 'Управляйте деньгами. Мы позаботимся о проверке.'],
+  assistant: ['ИИ-помощник по безопасности', 'Разберём ситуацию и заметим признаки известных схем обмана.'],
   security: ['Безопасность аккаунта', 'Данные доступа и защита после их изменения.'],
   history: ['История и обращения', 'Все операции, решения системы и ответы банка.'],
   cases: ['Контроль операций', 'Видно каждое решение: основание, получатель и результат.'],
@@ -110,10 +112,14 @@ function render() {
   $('#navigation').innerHTML = navItems[ui.role].map(([id, symbol, title]) => `<button type="button" data-page="${id}" class="${ui.page === id ? 'active' : ''}" ${ui.page === id ? 'aria-current="page"' : ''}>${icon(symbol)}${title}</button>`).join('');
   $('#page-title').textContent = titles[ui.page][0]; $('#page-description').textContent = titles[ui.page][1];
   renderBanner();
-  const views = { transfer: transferView, security: securityView, history: historyView, cases: employeeView, registry: registryView, events: eventsView };
+  const views = { transfer: transferView, assistant: assistantView, security: securityView, history: historyView, cases: employeeView, registry: registryView, events: eventsView };
   $('#workspace').innerHTML = views[ui.page]();
-  if (ui.role === 'employee' && ui.page === 'cases') $('#workspace').insertAdjacentHTML('afterbegin', classifierControls() + staffReviewQueue());
+  if (ui.role === 'employee' && ui.page === 'cases') $('#workspace').insertAdjacentHTML('afterbegin', classifierControls() + staffReviewQueue() + staffAssistantReports());
   if (ui.role === 'client' && ['transfer', 'history'].includes(ui.page)) $('#workspace').insertAdjacentHTML('afterbegin', clientReviewQueue());
+  if (ui.role === 'client') {
+    const pending = state.operations.filter(op => op.status === 'pending' && op.code === 'MODEL_REVIEW');
+    document.querySelectorAll('.review-queue .review-card').forEach((card, i) => { if (pending[i]) card.insertAdjacentHTML('beforeend', `<button class="button secondary small ai-open" type="button" data-ai-operation="${esc(pending[i].id)}">Обсудить перевод с ИИ</button>`); });
+  }
   if (state.securityLock && $('.balance-bottom span')) $('.balance-bottom span').textContent = 'Демо-баланс · списания заблокированы';
   if (ui.page === 'security' && !state.securityLock) $('#workspace').insertAdjacentHTML('afterbegin', '<p class="notice">Предупреждение «Это был не я» отображается только в старых сессиях — открытых до нового входа или изменения данных. В сессии, совершившей действие, кнопки нет.</p>');
   updateRecipientInfo();
@@ -128,6 +134,24 @@ function policyView() {
 function transferView() {
   const options = allRecipients().map(r => `<option value="${esc(r.id)}" ${ui.recipient === r.id ? 'selected' : ''}>${esc(r.name)} · ${isKnown(state, r.id, now()) ? 'прежний' : 'новый'}</option>`).join('');
   return `<div class="grid-main"><div>${balanceCard()}<section class="panel"><h2>Новая операция</h2><div class="segment" role="group" aria-label="Тип операции"><button data-kind="transfer" type="button" class="${ui.kind === 'transfer' ? 'active' : ''}">${icon('transfer')} Перевод</button><button data-kind="cash" type="button" class="${ui.kind === 'cash' ? 'active' : ''}">${icon('cash')} Наличные</button></div><form id="operation-form" novalidate>${ui.kind === 'transfer' ? `<label class="field-label" for="recipient">Кому переводим</label><select id="recipient" name="recipient">${options}<option value="custom" ${ui.recipient === 'custom' ? 'selected' : ''}>Другой получатель по демо-ID</option></select><div id="custom-recipient" ${ui.recipient === 'custom' ? '' : 'hidden'}><label class="field-label" for="custom-id">Демонстрационный ID</label><input id="custom-id" maxlength="50" placeholder="DEMO-NEW-002" value="${esc(ui.customId)}"><label class="field-label" for="custom-name">Имя для истории</label><input id="custom-name" maxlength="80" placeholder="Новый получатель" value="${esc(ui.customName)}"></div><div class="recipient-meta" id="recipient-info"></div>` : `<div class="notice">${icon('cash')} Демонстрация снятия наличных. Банкомат и карта не подключены.</div>`}<label class="field-label" for="amount">Сумма, ₽</label><input class="amount-input" id="amount" inputmode="decimal" autocomplete="off" value="${esc(ui.amount)}" aria-describedby="amount-help"><p class="field-help" id="amount-help">${ui.kind === 'transfer' ? 'Комиссия в демо — 0 ₽' : 'Деньги списываются только после подтверждения'}</p><p id="form-error" class="dialog-error" role="alert"></p><button class="button full" type="submit">Проверить ${ui.kind === 'transfer' ? 'перевод' : 'снятие'} ${icon('arrow')}</button><p class="secure-caption">${icon('lock')} Сначала проверка, затем подтверждение</p></form></section></div><aside>${policyView()}</aside></div>${operationsTable(state.operations.slice(0, 5), false, 'Последние операции')}`;
+}
+const scenarioNames = { none: 'Явная схема не выявлена', unknown: 'Недостаточно данных', safe_account: 'Безопасный счёт', law_enforcement: 'Требование от имени МВД / госоргана', phishing: 'Фишинг', remote_access: 'Удалённый доступ', impersonation: 'Подмена знакомого', investment: 'Лжеинвестиции', loan_pressure: 'Кредит под давлением', cash_courier: 'Наличные для курьера' };
+function aiAssessmentView(a) {
+  if (!a) return '';
+  return `<div class="ai-assessment ${a.class}"><span class="pill ${a.class === 'block' ? 'red' : a.class === 'normal' ? 'green' : 'amber'}">Рекомендация ИИ: ${esc(classNames[a.class])}</span><h3>${esc(scenarioNames[a.scenario])}</h3><p>${esc(a.explanation)}</p>${a.evidence?.length ? `<p class="ai-evidence">Основания из ваших ответов: ${a.evidence.map(x => `«${esc(x)}»`).join('; ')}</p>` : ''}<small>Предварительная оценка · ${esc(a.model_version)}. Не гарантирует безопасность и не разрешает платёж.</small></div>`;
+}
+function aiTurnsView(c) {
+  return c.turns.map(t => `<div class="ai-message user"><b>Клиент</b><p>${esc(t.message)}</p></div><div class="ai-message bot"><b>ИИ-помощник</b>${t.status === 'processing' ? '<p role="status">Анализируем объяснение… Если ответ не появился, обновите страницу или начните новый диалог через минуту.</p>' : t.error ? `<p class="dialog-error">${esc(t.error)}</p>` : `${aiAssessmentView(t.response)}${t.response?.next_question ? `<p class="ai-question">${esc(t.response.next_question)}</p>` : ''}`}</div>`).join('');
+}
+function assistantView() {
+  const c = state.aiConversations?.find(c => c.id === ui.aiConversationId);
+  const pending = state.operations.filter(op => op.status === 'pending' && op.code === 'MODEL_REVIEW');
+  const finished = c?.status === 'complete', processing = ui.aiBusy || c?.status === 'processing';
+  return `<div class="assistant-layout"><section class="panel"><div class="section-head"><h2>Проверим обстоятельства перевода</h2><span class="pill blue">Qwen · Groq</span></div><p class="panel-subtitle">Помощник уточняет ситуацию за 1–4 ответа. Для хакатона используйте только вымышленные данные.</p><div class="notice warning">Это внешний ИИ-сервис, он может ошибаться. Не вводите ФИО, телефоны, номера карт, пароли и SMS-коды. Автоматическое скрытие данных не гарантирует полную анонимность.</div>${!assistantConfig?.configured ? '<div class="notice error">Серверный ключ модели не настроен. Обратитесь к сотруднику.</div>' : ''}${c ? `<p class="field-help">${c.operationId ? `Проверка перевода ${esc(c.operationId)}. Опасная рекомендация остановит только этот ожидающий перевод.` : 'Общая проверка ситуации: она не привязана к переводу и не блокирует операции.'}</p>${aiTurnsView(c)}` : `<label class="field-label" for="ai-operation">Какую ситуацию проверяем</label><select id="ai-operation"><option value="">Общая проверка ситуации</option>${pending.map(op => `<option value="${esc(op.id)}" ${ui.aiOperationId === op.id ? 'selected' : ''}>${esc(op.id)} · ${esc(op.recipientName)} · ${money(op.amount)}</option>`).join('')}</select><div class="ai-message bot"><b>ИИ-помощник</b><p>Кому и зачем вы переводите деньги? Кто предложил перевод и знакомы ли вам эти реквизиты?</p></div>`}${finished ? '<p class="notice">Оценка завершена. Результат доступен сотруднику банка; он не заменяет проверку личности и не снимает ограничения.</p>' : `<form id="ai-chat-form"><label class="field-label" for="ai-message">Ваш ответ</label><textarea id="ai-message" maxlength="1200" required placeholder="Опишите вымышленную ситуацию своими словами" ${processing ? 'disabled' : ''}>${esc(ui.aiDraft)}</textarea><label class="ai-consent"><input type="checkbox" id="ai-consent" ${ui.aiConsent ? 'checked' : ''} required ${processing ? 'disabled' : ''}><span>Согласен отправить текст объяснения в Groq для анализа и сохранить диалог для сотрудника банка. Реальные персональные и банковские данные не ввожу.</span></label><button type="submit" class="button" ${processing || !assistantConfig?.configured ? 'disabled' : ''}>${processing ? 'Ждём ответ модели…' : 'Отправить ИИ'}</button></form>`}<button type="button" class="link-button ai-open" id="ai-new" ${ui.aiBusy ? 'disabled' : ''}>Начать новый диалог</button></section><aside class="panel ai-about"><h2>Что проверяем</h2><p>«Безопасный счёт», требования от имени МВД, фишинг, удалённый доступ, подмену близкого, лжеинвестиции, навязанный кредит и передачу наличных.</p><h3>Как действует защита</h3><p>ИИ не отправляет деньги. Благоприятный ответ не отменяет паузу, реестр или решение классификатора переводов.</p><h3>Недавние диалоги</h3>${(state.aiConversations || []).slice(0, 8).map(x => `<button class="link-button ai-history" type="button" data-ai-conversation="${esc(x.id)}">${esc(date(x.createdAt))} · ${esc(x.operationId || 'Общая проверка')}</button>`).join('') || '<p>Диалогов пока нет.</p>'}</aside></div>`;
+}
+function staffAssistantReports() {
+  const conversations = (state.aiConversations || []).filter(c => c.assessment || c.status === 'error');
+  return `<section class="panel model-panel"><div class="section-head"><h2>Предварительные проверки ИИ</h2><small>Последние ${Math.min(conversations.length, 5)}</small></div><p class="panel-subtitle">Рекомендация не является проверкой личности или разрешением платежа. Сверяйте её с ответами клиента и независимыми сигналами.</p>${conversations.slice(0, 5).map(c => `<details class="ai-report"><summary>${esc(c.operationId || 'Общая проверка')} · ${esc(date(c.createdAt))} · ${esc(c.assessment ? classNames[c.assessment.class] : 'Ошибка сервиса')}</summary>${c.operationId ? '' : '<p class="field-help">Без привязки к переводу; операций не блокирует.</p>'}${aiTurnsView(c)}</details>`).join('') || '<p class="empty">Клиент ещё не обращался к ИИ-помощнику.</p>'}</section>`;
 }
 function requestFromForm() {
   const r = allRecipients().find(r => r.id === ui.recipient);
@@ -193,6 +217,7 @@ function decisionDialog(decision, request, operation, readOnly = false) {
   if (request.kind === 'transfer') $('#dialog-title').insertAdjacentHTML('afterend', classificationPill(decision.classification ?? operation?.classification));
   if (!completed && operation?.status === 'pending' && operation.code === 'MODEL_REVIEW') $('#dialog-title').textContent = 'Перевод на проверке сотрудника';
   if (!completed && decision.code === 'MODEL_BLOCK') { $('#dialog-title').textContent = 'Перевод заблокирован'; $('#dialog .dialog-symbol').classList.remove('amber'); $('#dialog .dialog-symbol').classList.add('red'); }
+  if (ui.role === 'client' && operation?.status === 'pending' && operation.code === 'MODEL_REVIEW') $('#dialog .dialog-actions').insertAdjacentHTML('afterbegin', `<button type="button" class="button secondary" data-ai-operation="${esc(operation.id)}">Обсудить с ИИ</button>`);
 }
 let pendingRequest = null;
 async function submitOperation() {
@@ -211,6 +236,9 @@ document.addEventListener('click', async e => {
   try {
     if (b.hasAttribute('data-close')) { closeDialog(); return; }
     if (b.id === 'logout') { await api('/api/auth/logout', {}); location.replace('/login'); return; }
+    if (b.dataset.aiOperation) { closeDialog(); ui.page = 'assistant'; ui.aiConversationId = null; ui.aiOperationId = b.dataset.aiOperation; ui.aiDraft = ''; ui.aiRequestId = null; render(); }
+    if (b.dataset.aiConversation) { ui.page = 'assistant'; ui.aiConversationId = b.dataset.aiConversation; ui.aiDraft = ''; ui.aiRequestId = null; render(); }
+    if (b.id === 'ai-new') { ui.aiConversationId = null; ui.aiOperationId = ''; ui.aiDraft = ''; ui.aiRequestId = null; render(); }
     if (b.dataset.resumeReviewed) {
       const op = state.operations.find(op => op.id === b.dataset.resumeReviewed);
       if (!op) return;
@@ -258,18 +286,33 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('input', e => {
   if (e.target.id === 'amount') ui.amount = e.target.value;
+  if (e.target.id === 'ai-message') { ui.aiDraft = e.target.value; ui.aiRequestId = null; }
   if (e.target.id === 'custom-id') { ui.customId = e.target.value; updateRecipientInfo(); }
   if (e.target.id === 'custom-name') ui.customName = e.target.value;
   if (e.target.id?.startsWith('reply-')) ui.answers[e.target.id.slice(6)] = e.target.value;
   if (e.target.id?.startsWith('review-comment-')) ui.answers['review-' + e.target.id.slice(15)] = e.target.value;
 });
 document.addEventListener('change', e => {
+  if (e.target.id === 'ai-operation') ui.aiOperationId = e.target.value;
+  if (e.target.id === 'ai-consent') ui.aiConsent = e.target.checked;
   if (e.target.id === 'recipient') { ui.recipient = e.target.value; $('#custom-recipient').hidden = ui.recipient !== 'custom'; updateRecipientInfo(); }
   if (e.target.id === 'operation-filter') { ui.filter = e.target.value; render(); }
 });
 document.addEventListener('submit', async e => {
   e.preventDefault();
   try {
+    if (e.target.id === 'ai-chat-form') {
+      if (ui.aiBusy) return;
+      const message = ui.aiDraft.trim();
+      if (!message || !ui.aiConsent) { toast('Напишите объяснение и подтвердите согласие'); return; }
+      ui.aiRequestId ||= crypto.randomUUID();
+      const payload = { message, consent: ui.aiConsent, requestId: ui.aiRequestId, conversationId: ui.aiConversationId, operationId: ui.aiConversationId ? undefined : ui.aiOperationId || undefined };
+      ui.aiBusy = true; render();
+      try {
+        const result = await api('/api/assistant', payload);
+        state = result.state; receivedAt = Date.now(); ui.aiConversationId = result.conversationId; ui.aiDraft = ''; ui.aiRequestId = null;
+      } finally { ui.aiBusy = false; render(); }
+    }
     if (e.target.id === 'model-mode-form') { await action('model-mode', { mode: $('#model-mode').value }); toast('Режим демонстрационной заглушки изменён'); }
     if (e.target.dataset.reviewForm) {
       const id = e.target.dataset.reviewForm, comment = $(`#review-comment-${id}`).value, verdict = e.submitter?.dataset.verdict;
@@ -311,6 +354,7 @@ setInterval(async () => {
     const me = await api('/api/auth/me');
     if (me.user.id !== account.id) { location.replace(me.user.role === 'employee' ? '/employee' : '/client'); return; }
     const data = await api('/api/state');
+    assistantConfig = data.assistant;
     $('#connection-notice').hidden = true;
     if (data.state.revision !== state.revision) {
       state = data.state; receivedAt = Date.now();

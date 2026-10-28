@@ -51,8 +51,10 @@ npm start -- --port 4173
 
 ## Проверки
 
+ИИ-помощник подключён к Groq (Qwen) на сервере. Настройка, ограничения и сценарий демонстрации: [docs/anti-scam-assistant.md](docs/anti-scam-assistant.md).
+
 ```powershell
-node --test tests/auth.test.mjs tests/engine.test.mjs
+node --test tests/auth.test.mjs tests/engine.test.mjs tests/assistant.test.mjs
 ```
 
 Проверяются права, учётные записи и хеши, неправильный пароль, выход и истечение сессии, защита от подмены роли, серверные ограничения, реестр, обращения и повторное подтверждение.

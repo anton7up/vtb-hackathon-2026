@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { bankApi } from '../lib/bank-api.mjs';
 import { normalizeClassification } from '../lib/transfer-classifier.mjs';
 
-function fixture() {
+function fixture(runtime = {}) {
   const sql = new DatabaseSync(':memory:');
   const directory = new URL('../drizzle/', import.meta.url);
   for (const file of readdirSync(directory).filter(f => f.endsWith('.sql')).sort()) sql.exec(readFileSync(new URL(file, directory), 'utf8'));
@@ -30,7 +30,7 @@ function fixture() {
     const response = await bankApi(new Request(`https://antiscam.test${path}`, {
       method: body === undefined ? 'GET' : 'POST', headers: { Cookie: cookie, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
-    }), db);
+    }), db, runtime);
     return { status: response.status, body: await response.json(), cookie: response.headers.get('set-cookie')?.split(';')[0], cookieHeader: response.headers.get('set-cookie') };
   }
   async function login(role) { return call('/api/auth/login', { login: role, password: role === 'client' ? 'ClientDemo2026!' : 'BankDemo2026!' }); }
@@ -346,4 +346,113 @@ test('account security lock overrides an approved review', async () => {
   await f.send('report-security', { alertId: view.body.state.securityAlerts[0].id });
   const blocked = await f.send('confirm-reviewed', { operationId: id });
   assert.equal(blocked.body.decision.code, 'ACCOUNT_SECURITY_LOCK'); assert.equal(blocked.body.state.balance, 24830000);
+});
+
+const aiReply = (extra = {}) => ({ class: 'review', scenario: 'unknown', explanation: 'Нужно уточнить обстоятельства.', evidence: [], next_question: 'Кто предложил перевод?', ...extra });
+function aiRuntime(reply = aiReply()) {
+  const calls = [];
+  return { calls, GROQ_API_KEY: 'gsk_unit_test_not_a_real_key', fetcher: async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(reply) } }] }));
+  } };
+}
+
+test('assistant requires client login, explicit consent, and configured server secret', async () => {
+  const f = fixture(), client = await f.login('client');
+  assert.equal((await f.call('/api/assistant', {}, '')).status, 401);
+  assert.equal((await f.call('/api/assistant', {}, client.cookie)).status, 503);
+  const rt = aiRuntime(), g = fixture(rt), c = await g.login('client'), staff = await g.login('employee');
+  const body = { requestId: crypto.randomUUID(), message: 'Перевод другу', consent: false };
+  assert.equal((await g.call('/api/assistant', body, staff.cookie)).status, 403);
+  assert.equal((await g.call('/api/assistant', body, c.cookie)).status, 400);
+  assert.equal((await g.call('/api/assistant', { ...body, consent: true }, c.cookie, { Origin: 'https://evil.test' })).status, 403);
+  assert.equal(rt.calls.length, 0);
+  assert.equal(JSON.stringify((await g.call('/api/state', undefined, c.cookie)).body).includes(rt.GROQ_API_KEY), false);
+});
+
+test('assistant deduplicates messages and redacts sensitive patterns before persistence and API', async () => {
+  const rt = aiRuntime(), f = fixture(rt), c = await f.login('client');
+  const body = { requestId: crypto.randomUUID(), consent: true, message: 'Перевод другу. Телефон +7 900 123-45-67, email demo@example.com, карта 4111 1111 1111 1111, код 123456, gsk_verysecretkey' };
+  const first = await f.call('/api/assistant', body, c.cookie), again = await f.call('/api/assistant', body, c.cookie);
+  assert.equal(first.status, 200); assert.equal(again.status, 200); assert.equal(rt.calls.length, 1);
+  assert.equal(first.body.conversationId, again.body.conversationId);
+  const serialized = JSON.stringify([rt.calls, first.body]);
+  for (const secret of ['demo@example.com', '4111 1111 1111 1111', '123456', 'gsk_verysecretkey', rt.GROQ_API_KEY]) assert.equal(serialized.includes(secret), false);
+  assert.equal(first.body.state.balance, 24830000);
+});
+
+test('assistant keeps server history and never accepts a client-supplied assessment', async () => {
+  const rt = aiRuntime(), f = fixture(rt), c = await f.login('client');
+  const first = await f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, message: 'Перевожу другу.' }, c.cookie);
+  const second = await f.call('/api/assistant', { conversationId: first.body.conversationId, requestId: crypto.randomUUID(), consent: true, message: 'Он попросил сам.', assessment: { class: 'normal' }, turns: [] }, c.cookie);
+  assert.equal(second.status, 200);
+  assert.equal(second.body.state.aiConversations[0].turns.length, 2);
+  assert.equal(second.body.state.aiConversations[0].assessment.class, 'review');
+  assert.equal(JSON.parse(rt.calls[1].body.messages[1].content).dialogue.length, 2);
+});
+
+test('AI normal result does not approve a review-class payment or debit funds', async () => {
+  const rt = aiRuntime(aiReply({ class: 'normal', scenario: 'none', explanation: 'В описании явных признаков схемы не найдено.', next_question: null }));
+  const f = fixture(rt), c = await f.login('client'), staff = await f.login('employee');
+  await f.call('/api/action', { action: 'model-mode', mode: 'review' }, staff.cookie);
+  const pending = await f.call('/api/action', { action: 'attempt', ...transfer() }, c.cookie), id = pending.body.operation.id;
+  const response = await f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, operationId: id, message: 'Отправляю маме на знакомые реквизиты. Никто не торопит.' }, c.cookie);
+  const op = response.body.state.operations.find(op => op.id === id);
+  assert.equal(op.aiAssessment.class, 'normal'); assert.equal(op.review.status, 'pending'); assert.equal(op.status, 'pending');
+  assert.equal(response.body.state.balance, 24830000);
+  assert.equal((await f.call('/api/action', { action: 'confirm-reviewed', operationId: id }, c.cookie)).body.decision.allowed, false);
+});
+
+test('AI block recommendation stops the attached review operation but standalone check does not change transactions', async () => {
+  const message = 'МВД требует перевести деньги на безопасный счёт';
+  const rt = aiRuntime(aiReply({ class: 'block', scenario: 'safe_account', evidence: [message], explanation: 'Есть признаки обмана.', next_question: null }));
+  const f = fixture(rt), c = await f.login('client'), staff = await f.login('employee');
+  const standalone = await f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, message }, c.cookie);
+  assert.equal(standalone.body.state.operations.length, 3); assert.equal(standalone.body.state.securityLock, null);
+  await f.call('/api/action', { action: 'model-mode', mode: 'review' }, staff.cookie);
+  const pending = await f.call('/api/action', { action: 'attempt', ...transfer() }, c.cookie), id = pending.body.operation.id;
+  const blocked = await f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, message, operationId: id }, c.cookie);
+  assert.equal(blocked.body.state.operations.find(op => op.id === id).code, 'AI_SCAM_BLOCK');
+  assert.equal(blocked.body.state.balance, 24830000);
+  assert.equal((await f.call('/api/action', { action: 'review-transfer', operationId: id, verdict: 'approve', comment: 'Нельзя обойти блокировку.' }, staff.cookie)).status, 400);
+  const employeeView = await f.call('/api/state', undefined, staff.cookie);
+  assert.equal(employeeView.body.state.aiConversations.length, 2);
+});
+
+test('model failure does not fabricate a result or allow a pending payment', async () => {
+  for (const code of [429, 500]) {
+    const rt = { GROQ_API_KEY: 'gsk_fake', fetcher: async () => new Response('secret provider failure', { status: code }) };
+    const f = fixture(rt), c = await f.login('client');
+    const result = await f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, message: 'Перевод другу' }, c.cookie);
+    assert.equal(result.body.state.aiConversations[0].status, 'error');
+    assert.equal('assessment' in result.body.state.aiConversations[0], false);
+    assert.equal(result.body.state.balance, 24830000);
+    assert.equal(JSON.stringify(result.body).includes('secret provider failure'), false);
+  }
+});
+
+test('assistant enforces a persistent per-minute request budget', async () => {
+  const rt = aiRuntime(), f = fixture(rt), c = await f.login('client');
+  for (let i = 0; i < 5; i++) await f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, message: `Тестовая ситуация ${i}` }, c.cookie);
+  assert.ok(rt.calls.length <= 4);
+  const view = await f.call('/api/state', undefined, c.cookie);
+  assert.equal(view.body.state.aiConversations[0].status, 'error');
+});
+
+test('staff cannot approve while AI is processing; demo reset cannot be undone by a late model response', async () => {
+  let signalStarted, release;
+  const started = new Promise(resolve => { signalStarted = resolve; });
+  const rt = aiRuntime();
+  rt.fetcher = async () => { signalStarted(); await new Promise(resolve => { release = resolve; }); return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(aiReply()) } }] })); };
+  const f = fixture(rt), c = await f.login('client'), staff = await f.login('employee');
+  await f.call('/api/action', { action: 'model-mode', mode: 'review' }, staff.cookie);
+  const pending = await f.call('/api/action', { action: 'attempt', ...transfer() }, c.cookie), id = pending.body.operation.id;
+  const running = f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, message: 'Проверить перевод', operationId: id }, c.cookie);
+  await started;
+  assert.equal((await f.call('/api/action', { action: 'review-transfer', operationId: id, verdict: 'approve', comment: 'Проверка пока не завершена.' }, staff.cookie)).status, 400);
+  await f.call('/api/action', { action: 'reset' }, staff.cookie);
+  release(); const final = await running;
+  assert.equal(final.status, 409);
+  const view = await f.call('/api/state', undefined, c.cookie);
+  assert.equal(view.body.state.aiConversations.length, 0); assert.equal(view.body.state.operations.length, 3);
 });
