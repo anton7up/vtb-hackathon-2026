@@ -1,16 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { ensureDemoRecipientHistory } from '../lib/demo-class-recipients.mjs';
 import { DAY, initialState, protectionOf, isKnown, parseAmount, changeAccess, attempt, confirmOperation, openTicket, replyToTicket, addRegistryEntry } from '../lib/bank-engine.mjs';
 const t = Date.parse('2026-10-28T09:00:00Z');
 const transfer = (id = 'DEMO-NEW-001', amount = 100000) => ({ kind: 'transfer', recipientId: id, recipientName: 'Получатель', amount });
 const risky = [{ recipient_id: 'DEMO-RISK-002', status: 'active', reason: 'Демо-фишинг', reason_code: 'TEST' }];
+
+test('existing demo state gains fixture history once without changing balance or user operations', () => {
+  const s = initialState(t);
+  s.operations = s.operations.filter(o => !o.id.startsWith('HISTORY-DEMO-CLASS-'));
+  const old = structuredClone(s.operations), balance = s.balance;
+  s.lastCriticalChange = t - 1000;
+  ensureDemoRecipientHistory(s, t);
+  ensureDemoRecipientHistory(s, t + 2000);
+  assert.equal(s.operations.length, 6);
+  assert.deepEqual(s.operations.slice(0, 3), old);
+  assert.equal(s.balance, balance);
+  for (const id of ['DEMO-CLASS-NORMAL', 'DEMO-CLASS-REVIEW', 'DEMO-CLASS-BLOCK']) assert.equal(isKnown(s, id, t), true);
+});
+
+test('security lock still blocks synthetic known normal recipient', () => {
+  const s = initialState(t); s.securityLock = { at: t };
+  const r = attempt(s, { ...transfer('DEMO-CLASS-NORMAL'), classification: { class: 'normal' } }, [], t);
+  assert.equal(r.decision.code, 'ACCOUNT_SECURITY_LOCK');
+  assert.equal(s.balance, 24830000);
+});
 test('no pause initially; cash and transfers require confirmation without immediate debit', () => {
   const s = initialState(t), balance = s.balance;
   assert.equal(protectionOf(s, t).active, false);
   assert.equal(attempt(s, transfer(), [], t).decision.allowed, true);
   assert.equal(attempt(s, { kind: 'cash', amount: 100000 }, [], t).decision.allowed, true);
   assert.equal(s.balance, balance);
-  assert.equal(s.operations.length, 3);
+  assert.equal(s.operations.length, 6);
 });
 test('phone change blocks new recipient without debit', () => {
   const s = initialState(t), balance = s.balance;

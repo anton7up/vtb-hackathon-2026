@@ -206,6 +206,42 @@ test('existing pre-update bank state without security fields remains compatible'
 });
 
 const transfer = (extra = {}) => ({ kind: 'transfer', recipientId: 'DEMO-FAMILY-001', amount: 300000, requestId: crypto.randomUUID(), ...extra });
+test('three fixed recipients expose all classes without changing the staff mode', async () => {
+  const f = fixture(), client = await f.login('client'), staff = await f.login('employee');
+  await f.call('/api/action', { action: 'model-mode', mode: 'unavailable' }, staff.cookie);
+  const before = await f.call('/api/state', undefined, client.cookie), balance = before.body.state.balance;
+  for (const cls of ['normal', 'review', 'block']) {
+    const id = `DEMO-CLASS-${cls.toUpperCase()}`;
+    assert.equal(before.body.state.recipients.find(r => r.id === id).demoClass, cls);
+    const r = await f.call('/api/action', { action: 'attempt', ...transfer({ recipientId: id, classification: { class: 'normal' }, demoClass: 'normal' }) }, client.cookie);
+    assert.equal(r.status, 200); assert.equal(r.body.decision.classification.class, cls);
+    assert.equal(r.body.decision.allowed, cls === 'normal');
+    assert.equal(r.body.state.balance, balance);
+    if (cls !== 'normal') assert.equal(r.body.operation.status, cls === 'review' ? 'pending' : 'blocked');
+    assert.equal(r.body.decision.classification.model_version, 'mock-recipient-v1');
+  }
+});
+
+test('fixture histories are synthetic, old enough for a pause and never debit the balance', async () => {
+  const f = fixture(), client = await f.login('client');
+  const before = await f.call('/api/state', undefined, client.cookie);
+  await f.call('/api/action', { action: 'recovery' }, client.cookie);
+  const r = await f.call('/api/action', { action: 'attempt', ...transfer({ recipientId: 'DEMO-CLASS-REVIEW' }) }, client.cookie);
+  assert.equal(r.body.decision.code, 'MODEL_REVIEW');
+  assert.equal(r.body.decision.known, true);
+  assert.equal(r.body.state.balance, before.body.state.balance);
+  for (const op of r.body.state.operations.filter(o => o.id.startsWith('HISTORY-DEMO-CLASS-'))) assert.equal(op.seeded, true);
+  const ordinary = await f.call('/api/action', { action: 'attempt', ...transfer({ recipientId: 'DEMO-NEW-001' }) }, client.cookie);
+  assert.equal(ordinary.body.decision.code, 'NEW_RECIPIENT_HOLD');
+});
+
+test('registry and security lock override the fixed normal fixture class', async () => {
+  const f = fixture(), client = await f.login('client'), staff = await f.login('employee');
+  await f.call('/api/action', { action: 'registry-add', entry: { recipient_id: 'DEMO-CLASS-NORMAL', display_name: 'Тест', reason: 'Тест приоритета реестра' } }, staff.cookie);
+  const r = await f.call('/api/action', { action: 'attempt', ...transfer({ recipientId: 'DEMO-CLASS-NORMAL' }) }, client.cookie);
+  assert.equal(r.body.decision.code, 'RISK_REGISTRY');
+  assert.equal(r.body.state.balance, 24830000);
+});
 async function modelFixture(mode) {
   const f = fixture(), client = await f.login('client'), staff = await f.login('employee');
   await f.call('/api/action', { action: 'model-mode', mode }, staff.cookie);
@@ -408,7 +444,7 @@ test('AI block recommendation stops the attached review operation but standalone
   const rt = aiRuntime(aiReply({ class: 'block', scenario: 'safe_account', evidence: [message], explanation: 'Есть признаки обмана.', next_question: null }));
   const f = fixture(rt), c = await f.login('client'), staff = await f.login('employee');
   const standalone = await f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, message }, c.cookie);
-  assert.equal(standalone.body.state.operations.length, 3); assert.equal(standalone.body.state.securityLock, null);
+  assert.equal(standalone.body.state.operations.length, 6); assert.equal(standalone.body.state.securityLock, null);
   await f.call('/api/action', { action: 'model-mode', mode: 'review' }, staff.cookie);
   const pending = await f.call('/api/action', { action: 'attempt', ...transfer() }, c.cookie), id = pending.body.operation.id;
   const blocked = await f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, message, operationId: id }, c.cookie);
@@ -454,5 +490,5 @@ test('staff cannot approve while AI is processing; demo reset cannot be undone b
   release(); const final = await running;
   assert.equal(final.status, 409);
   const view = await f.call('/api/state', undefined, c.cookie);
-  assert.equal(view.body.state.aiConversations.length, 0); assert.equal(view.body.state.operations.length, 3);
+  assert.equal(view.body.state.aiConversations.length, 0); assert.equal(view.body.state.operations.length, 6);
 });

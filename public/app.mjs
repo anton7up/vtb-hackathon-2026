@@ -126,6 +126,8 @@ function render() {
   if (state.securityLock && $('.balance-bottom span')) $('.balance-bottom span').textContent = 'Демо-баланс · списания заблокированы';
   if (ui.page === 'security' && !state.securityLock) $('#workspace').insertAdjacentHTML('afterbegin', '<p class="notice">Предупреждение «Это был не я» отображается только в старых сессиях — открытых до нового входа или изменения данных. В сессии, совершившей действие, кнопки нет.</p>');
   updateRecipientInfo();
+  if (ui.role === 'client' && ui.page === 'transfer') $('#workspace').insertAdjacentHTML('afterbegin', '<p class="notice">Для быстрой проверки выберите получателя «Тест · Нормальный перевод», «Тест · Нужно проверить · ИИ-помощник» или «Тест · Блокировка перевода». У них фиксированные демонстрационные классы — менять режим у сотрудника не нужно.</p>');
+  if (ui.role === 'employee' && ui.page === 'cases') $('#workspace').insertAdjacentHTML('afterbegin', '<p class="notice">Три получателя «Тест · …» имеют фиксированные классы независимо от режима ниже. Для остальных получателей работает выбранный режим заглушки.</p>');
   if (ui.aiModalOperationId && $('#dialog').open) renderAssistantDialog();
 }
 function balanceCard() { return `<div class="panel balance-card"><div class="balance-top"><span>Мастер-счёт · RUB</span><span class="mini-shield">${icon('shield')} Защищён</span></div><strong id="balance">${money(state.balance)}</strong><div class="balance-bottom"><span>Доступный демо-баланс</span><b>•• 4812</b></div></div>`; }
@@ -186,7 +188,9 @@ function updateRecipientInfo() {
   if (!$('#recipient-info')) return;
   const request = requestFromForm();
   const known = isKnown(state, request.recipientId, now());
+  const demoClass = allRecipients().find(r => r.id === request.recipientId)?.demoClass;
   $('#recipient-info').innerHTML = `<span class="pill ${known ? 'green' : 'blue'}">${icon('user')}${known ? 'Прежний получатель' : 'Новый получатель'}</span><span class="pill">${icon('shield')}Проверка перед отправкой</span><span class="pill">${esc(request.recipientId || 'Демо-ID не указан')}</span>`;
+  if (demoClass) $('#recipient-info').insertAdjacentHTML('beforeend', `<span class="pill ${demoClass === 'normal' ? 'green' : demoClass === 'block' ? 'red' : 'amber'}">Тестовый класс: ${esc(classNames[demoClass])}</span><p class="field-help demo-recipient-note">Класс задан для демонстрации, не предсказан ML. Есть вымышленная история прежних переводов. Реестр и блокировка аккаунта имеют приоритет.</p>`);
 }
 function statusPill(op) { return `<span class="pill ${op.status === 'completed' ? 'green' : op.status === 'pending' ? 'amber' : 'red'}">${op.status === 'completed' ? 'Выполнено' : op.status === 'pending' ? 'На проверке' : 'Остановлено'}</span>${classificationPill(op.classification, op.seeded || op.kind !== 'transfer')}`; }
 const classNames = { normal: 'Нормальный', review: 'Нужно проверить', block: 'Блокировка' };
