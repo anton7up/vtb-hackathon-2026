@@ -112,6 +112,8 @@ function render() {
   renderBanner();
   const views = { transfer: transferView, security: securityView, history: historyView, cases: employeeView, registry: registryView, events: eventsView };
   $('#workspace').innerHTML = views[ui.page]();
+  if (ui.role === 'employee' && ui.page === 'cases') $('#workspace').insertAdjacentHTML('afterbegin', classifierControls() + staffReviewQueue());
+  if (ui.role === 'client' && ['transfer', 'history'].includes(ui.page)) $('#workspace').insertAdjacentHTML('afterbegin', clientReviewQueue());
   if (state.securityLock && $('.balance-bottom span')) $('.balance-bottom span').textContent = 'Демо-баланс · списания заблокированы';
   if (ui.page === 'security' && !state.securityLock) $('#workspace').insertAdjacentHTML('afterbegin', '<p class="notice">Предупреждение «Это был не я» отображается только в старых сессиях — открытых до нового входа или изменения данных. В сессии, совершившей действие, кнопки нет.</p>');
   updateRecipientInfo();
@@ -137,7 +139,24 @@ function updateRecipientInfo() {
   const known = isKnown(state, request.recipientId, now());
   $('#recipient-info').innerHTML = `<span class="pill ${known ? 'green' : 'blue'}">${icon('user')}${known ? 'Прежний получатель' : 'Новый получатель'}</span><span class="pill">${icon('shield')}Проверка перед отправкой</span><span class="pill">${esc(request.recipientId || 'Демо-ID не указан')}</span>`;
 }
-function statusPill(op) { return `<span class="pill ${op.status === 'completed' ? 'green' : op.status === 'pending' ? 'amber' : 'red'}">${op.status === 'completed' ? 'Выполнено' : op.status === 'pending' ? 'На проверке' : 'Остановлено'}</span>`; }
+function statusPill(op) { return `<span class="pill ${op.status === 'completed' ? 'green' : op.status === 'pending' ? 'amber' : 'red'}">${op.status === 'completed' ? 'Выполнено' : op.status === 'pending' ? 'На проверке' : 'Остановлено'}</span>${classificationPill(op.classification, op.seeded || op.kind !== 'transfer')}`; }
+const classNames = { normal: 'Нормальный', review: 'Нужно проверить', block: 'Блокировка' };
+function classificationPill(value, hide = false) {
+  if (hide) return '';
+  return `<span class="model-result pill ${value?.class === 'normal' ? 'green' : value?.class === 'block' ? 'red' : 'amber'}">${value ? `Класс: ${esc(classNames[value.class] || 'Неизвестен')}` : 'Классификатор: нет ответа'}</span>${value ? `<small class="model-source">${value.source === 'mock' ? 'Демо-заглушка' : 'ML-модель'} · ${esc(value.model_version)}</small>` : ''}`;
+}
+function classifierControls() {
+  return `<section class="panel model-panel"><div class="section-head"><h2>Классификатор переводов</h2><span class="pill blue">Демо-заглушка · не ML</span></div><p class="panel-subtitle">Выберите ответ для новых проверок переводов. Клиент не управляет этим режимом. Пауза, реестр и блокировка аккаунта имеют приоритет.</p><form id="model-mode-form" class="model-controls"><div><label class="field-label" for="model-mode">Ответ заглушки</label><select id="model-mode">${[...Object.entries(classNames), ['unavailable', 'Сервис недоступен · проверка ошибки']].map(([value, label]) => `<option value="${value}" ${state.modelMock.mode === value ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></div><button type="submit" class="button secondary">Применить режим</button></form><p class="field-help">Сейчас: ${esc(classNames[state.modelMock.mode] || 'Нет ответа сервиса')}. Изменение режима не отправляет и не разблокирует ранее остановленные переводы.</p></section>`;
+}
+function staffReviewQueue() {
+  const pending = state.operations.filter(op => op.status === 'pending' && op.code === 'MODEL_REVIEW');
+  return `<section class="panel review-queue"><div class="section-head"><h2>Проверка спорных переводов</h2><small>${pending.length} в очереди</small></div><p class="panel-subtitle">Разрешение сотрудника не списывает деньги. Клиент подтверждает исходную сумму и получателя отдельно; все ограничения проверяются заново.</p>${pending.length ? pending.map(op => `<article class="review-card"><div class="ticket-top"><b>${esc(op.id)}</b>${classificationPill(op.classification)}</div><p><b>${esc(op.recipientName)} · ${money(op.amount)}</b><br>${esc(date(op.createdAt))} МСК</p>${op.review?.status === 'approved' ? `<p class="notice">Разрешено подтверждение клиента в течение 15 минут. Деньги пока не списаны.</p><p>${esc(op.review.comment)}</p>` : `<form data-review-form="${esc(op.id)}"><label class="field-label" for="review-comment-${esc(op.id)}">Комментарий по результату проверки</label><textarea id="review-comment-${esc(op.id)}" name="comment" minlength="5" maxlength="1000" required placeholder="Проверьте обстоятельства и свяжитесь с клиентом по проверенному каналу">${esc(ui.answers['review-' + op.id] || '')}</textarea><div class="review-actions"><button type="submit" class="button" data-verdict="approve">Разрешить подтверждение</button><button type="submit" class="button danger" data-verdict="reject">Отклонить перевод</button></div></form>`}</article>`).join('') : '<p class="empty">Переводов класса «Нужно проверить» пока нет.</p>'}</section>`;
+}
+function clientReviewQueue() {
+  const pending = state.operations.filter(op => op.status === 'pending' && op.code === 'MODEL_REVIEW');
+  if (!pending.length) return '';
+  return `<section class="panel review-queue"><h2>Переводы на дополнительной проверке</h2><p class="panel-subtitle">Деньги остаются на счёте. Результат классификации сейчас имитируется заглушкой.</p>${pending.map(op => `<article class="review-card"><div class="ticket-top"><b>${esc(op.recipientName)} · ${money(op.amount)}</b>${classificationPill(op.classification)}</div><p>${esc(op.reason)}</p>${op.review?.comment ? `<p class="reply">${esc(op.review.comment)}</p>` : ''}${op.review?.status === 'approved' ? `<button type="button" class="button" data-resume-reviewed="${esc(op.id)}">Подтвердить проверенный перевод</button>` : '<span class="pill amber">Ожидает решения сотрудника</span>'}</article>`).join('')}</section>`;
+}
 function operationsTable(ops, employee = false, title = 'Операции') {
   return `<section class="panel history"><div class="section-head"><h2>${esc(title)}</h2><small>${ops.length} записей</small></div><div class="table-wrap"><table class="${employee ? 'employee-table' : 'client-table'}"><thead><tr><th>Получатель / операция</th><th class="money">Сумма</th>${employee ? '<th>Основание</th>' : ''}<th>Статус</th><th></th></tr></thead><tbody>${ops.length ? ops.map(op => `<tr><td><div class="recipient-cell"><span class="recipient-avatar">${icon(op.kind === 'cash' ? 'cash' : 'user')}</span><div>${esc(op.recipientName)}<small>${esc(date(op.createdAt))}${op.seeded ? ' · демо-история' : ''}</small></div></div></td><td class="money">${money(op.amount)}</td>${employee ? `<td class="reason-column">${esc(op.reason)}<small>${esc(op.code)} · ${op.kind === 'cash' ? 'Наличные' : op.knownAtDecision ? 'Прежний получатель' : 'Новый получатель'}</small></td>` : ''}<td>${statusPill(op)}</td><td><button type="button" class="link-button" data-operation="${esc(op.id)}" aria-label="Подробнее об операции ${esc(op.id)}">Подробнее</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">Новых операций пока нет. Создайте перевод в кабинете клиента.</td></tr>'}</tbody></table></div></section>`;
 }
@@ -171,22 +190,37 @@ function decisionDialog(decision, request, operation, readOnly = false) {
   const completed = operation?.status === 'completed';
   const title = completed ? (request.kind === 'cash' ? 'Наличные выданы в демо' : 'Перевод выполнен') : decision.code === 'RISK_REGISTRY' ? 'Получатель в демо-реестре' : decision.code === 'REGISTRY_UNAVAILABLE' ? 'Проверка не завершена' : 'Операция остановлена';
   showDialog(title, `<p>${esc(completed ? operation.reason : decision.reason)}</p><div class="dialog-facts"><div><span>${request.kind === 'cash' ? 'Операция' : 'Получатель'}</span><b>${esc(request.recipientName)}</b></div><div><span>Сумма</span><b>${money(request.amount)}</b></div>${!completed && decision.endsAt && ['CASH_HOLD', 'NEW_RECIPIENT_HOLD'].includes(decision.code) ? `<div><span>Пауза до</span><b>${date(decision.endsAt)} МСК</b></div>` : ''}${decision.registryReason ? `<div><span>Основание</span><b>${esc(decision.registryReason)}</b></div>` : ''}</div><p>${completed ? `Остаток: ${money(state.balance)}.` : 'Деньги не списаны. Операция не будет выполнена автоматически.'}</p><div class="dialog-actions">${operation && !completed && ui.role === 'client' ? `<button type="button" class="button secondary" data-support="${esc(operation.id)}">Обратиться в банк</button>` : ''}<button type="button" class="button" data-close>${completed ? 'Готово' : readOnly ? 'Закрыть' : 'Понятно'}</button></div>`, completed ? 'check' : 'lock', completed ? 'green' : decision.code === 'RISK_REGISTRY' ? 'red' : 'amber');
+  if (request.kind === 'transfer') $('#dialog-title').insertAdjacentHTML('afterend', classificationPill(decision.classification ?? operation?.classification));
+  if (!completed && operation?.status === 'pending' && operation.code === 'MODEL_REVIEW') $('#dialog-title').textContent = 'Перевод на проверке сотрудника';
+  if (!completed && decision.code === 'MODEL_BLOCK') { $('#dialog-title').textContent = 'Перевод заблокирован'; $('#dialog .dialog-symbol').classList.remove('amber'); $('#dialog .dialog-symbol').classList.add('red'); }
 }
 let pendingRequest = null;
 async function submitOperation() {
   const request = requestFromForm();
+  request.requestId = crypto.randomUUID();
   if (request.amount === null) { $('#form-error').textContent = 'Введите положительную сумму, не более двух знаков после запятой.'; return; }
   const result = await action('attempt', request);
   if (['INVALID_AMOUNT', 'INVALID_RECIPIENT', 'INVALID_KIND'].includes(result.decision.code)) { $('#form-error').textContent = result.decision.reason; return; }
   if (!result.decision.allowed) { decisionDialog(result.decision, request, result.operation); return; }
-  pendingRequest = { ...request, requestId: crypto.randomUUID() };
+  pendingRequest = request;
   showDialog(request.kind === 'cash' ? 'Подтвердите снятие' : 'Подтвердите перевод', `<p>${esc(result.decision.reason)}</p><div class="dialog-facts"><div><span>${request.kind === 'cash' ? 'Операция' : 'Получатель'}</span><b>${esc(request.recipientName)}</b></div><div><span>Сумма</span><b>${money(request.amount)}</b></div></div><p>При подтверждении спишется только демонстрационный баланс.</p><div class="dialog-actions"><button type="button" class="button subtle" data-close>Отмена</button><button type="button" class="button" id="confirm-operation">Подтвердить</button></div>`, request.kind === 'cash' ? 'cash' : 'transfer');
+  if (request.kind === 'transfer') $('#dialog-title').insertAdjacentHTML('afterend', classificationPill(result.classification));
 }
 document.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;
   try {
     if (b.hasAttribute('data-close')) { closeDialog(); return; }
     if (b.id === 'logout') { await api('/api/auth/logout', {}); location.replace('/login'); return; }
+    if (b.dataset.resumeReviewed) {
+      const op = state.operations.find(op => op.id === b.dataset.resumeReviewed);
+      if (!op) return;
+      showDialog('Подтвердите проверенный перевод', `<p>Сотрудник разрешил продолжить. При подтверждении сервер снова проверит ограничения.</p><div class="dialog-facts"><div><span>Получатель</span><b>${esc(op.recipientName)}</b></div><div><span>Сумма</span><b>${money(op.amount)}</b></div></div><div class="dialog-actions"><button type="button" class="button subtle" data-close>Отмена</button><button type="button" class="button" data-confirm-reviewed="${esc(op.id)}">Подтвердить перевод</button></div>`);
+    }
+    if (b.dataset.confirmReviewed) {
+      b.disabled = true;
+      try { const result = await action('confirm-reviewed', { operationId: b.dataset.confirmReviewed }); decisionDialog(result.decision, result.operation, result.operation); }
+      finally { b.disabled = false; }
+    }
     if (b.dataset.reportSecurity) {
       const alert = state.securityAlerts?.find(a => a.id === b.dataset.reportSecurity);
       if (!alert) return;
@@ -216,7 +250,7 @@ document.addEventListener('click', async e => {
     }
     if (b.dataset.operation) {
       const op = state.operations.find(x => x.id === b.dataset.operation);
-      if (op) decisionDialog({ code: op.code, reason: op.reason, endsAt: op.holdEndsAt, registryReason: op.registryReason }, { kind: op.kind, recipientName: op.recipientName, amount: op.amount }, op, true);
+      if (op) decisionDialog({ code: op.code, reason: op.reason, endsAt: op.holdEndsAt, registryReason: op.registryReason, classification: op.classification }, { kind: op.kind, recipientName: op.recipientName, amount: op.amount }, op, true);
     }
     if (b.dataset.support) { await action('ticket', { operationId: b.dataset.support }); closeDialog(); ui.page = 'history'; render(); toast('Обращение создано. Оно доступно сотруднику банка.'); }
     if (b.id === 'retry-registry') await loadRegistry();
@@ -227,6 +261,7 @@ document.addEventListener('input', e => {
   if (e.target.id === 'custom-id') { ui.customId = e.target.value; updateRecipientInfo(); }
   if (e.target.id === 'custom-name') ui.customName = e.target.value;
   if (e.target.id?.startsWith('reply-')) ui.answers[e.target.id.slice(6)] = e.target.value;
+  if (e.target.id?.startsWith('review-comment-')) ui.answers['review-' + e.target.id.slice(15)] = e.target.value;
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'recipient') { ui.recipient = e.target.value; $('#custom-recipient').hidden = ui.recipient !== 'custom'; updateRecipientInfo(); }
@@ -235,6 +270,12 @@ document.addEventListener('change', e => {
 document.addEventListener('submit', async e => {
   e.preventDefault();
   try {
+    if (e.target.id === 'model-mode-form') { await action('model-mode', { mode: $('#model-mode').value }); toast('Режим демонстрационной заглушки изменён'); }
+    if (e.target.dataset.reviewForm) {
+      const id = e.target.dataset.reviewForm, comment = $(`#review-comment-${id}`).value, verdict = e.submitter?.dataset.verdict;
+      await action('review-transfer', { operationId: id, verdict, comment });
+      toast(verdict === 'approve' ? 'Разрешено подтверждение клиентом. Деньги не списаны.' : 'Перевод отклонён. Деньги не списаны.');
+    }
     if (e.target.id === 'operation-form') await submitOperation();
     if (e.target.id === 'phone-form') {
       const phone = $('#new-phone').value.trim();

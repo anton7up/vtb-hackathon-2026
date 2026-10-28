@@ -37,6 +37,8 @@ Cookie действует на весь профиль браузера: для 
 
 ## Локальный запуск
 
+Контракт трёх классов, приоритет ограничений, серверная заглушка и проверка сотрудником описаны в [docs/transfer-classification.md](docs/transfer-classification.md).
+
 Нужен Node.js 22.13 или новее. Зависимости устанавливаются штатным helper Sites либо `npm run install:ci`.
 
 ```powershell

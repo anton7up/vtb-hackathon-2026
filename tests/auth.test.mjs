@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { bankApi } from '../lib/bank-api.mjs';
+import { normalizeClassification } from '../lib/transfer-classifier.mjs';
 
 function fixture() {
   const sql = new DatabaseSync(':memory:');
@@ -202,4 +203,147 @@ test('existing pre-update bank state without security fields remains compatible'
   assert.equal(res.status, 200); assert.deepEqual(res.body.state.securityAlerts, []);
   await f.call('/api/action', { action: 'recovery' }, client.cookie);
   assert.equal((await f.call('/api/state', undefined, client.cookie)).status, 200);
+});
+
+const transfer = (extra = {}) => ({ kind: 'transfer', recipientId: 'DEMO-FAMILY-001', amount: 300000, requestId: crypto.randomUUID(), ...extra });
+async function modelFixture(mode) {
+  const f = fixture(), client = await f.login('client'), staff = await f.login('employee');
+  await f.call('/api/action', { action: 'model-mode', mode }, staff.cookie);
+  const send = (action, data = {}, employee = false) => f.call('/api/action', { ...data, action }, employee ? staff.cookie : client.cookie);
+  return { ...f, client, staff, send };
+}
+
+test('model contract accepts exactly three named classes and rejects malformed responses', () => {
+  for (const cls of ['normal', 'review', 'block']) assert.equal(normalizeClassification({ class: cls, model_version: 'v1' }).class, cls);
+  for (const raw of [null, {}, { class: 'safe', model_version: 'v1' }, { class: 0, model_version: 'v1' }, { class: 'normal' }, { class: 'normal', model_version: '' }]) assert.equal(normalizeClassification(raw), null);
+});
+
+test('normal class requires confirmation; role and model verdict cannot be spoofed by client', async () => {
+  const f = await modelFixture('normal'), request = transfer();
+  const attempt = await f.send('attempt', { ...request, classification: { class: 'block' } });
+  assert.equal(attempt.body.classification.class, 'normal'); assert.equal(attempt.body.decision.allowed, true);
+  assert.equal(attempt.body.state.balance, 24830000);
+  assert.equal('modelMock' in attempt.body.state, false);
+  assert.equal((await f.send('model-mode', { mode: 'normal' })).status, 403);
+  assert.equal((await f.send('review-transfer', { operationId: 'x' })).status, 403);
+  assert.equal((await f.send('confirm-reviewed', { operationId: 'x' }, true)).status, 403);
+  const paid = await f.send('confirm', request);
+  assert.equal(paid.body.operation.status, 'completed'); assert.equal(paid.body.state.balance, 24530000);
+  assert.equal(paid.body.operation.classification.source, 'mock');
+  assert.equal('modelFeatures' in paid.body.operation, false);
+});
+
+test('review class queues without debit; approval alone cannot pay; client confirms immutable saved details once', async () => {
+  const f = await modelFixture('review'), request = transfer();
+  const attempt = await f.send('attempt', request), op = attempt.body.operation;
+  assert.equal(op.status, 'pending'); assert.equal(op.code, 'MODEL_REVIEW');
+  assert.equal(attempt.body.state.balance, 24830000);
+  const again = await f.send('attempt', request);
+  assert.equal(again.body.duplicate, true); assert.equal(again.body.operation.id, op.id);
+  const premature = await f.send('confirm-reviewed', { operationId: op.id, review: { status: 'approved' } });
+  assert.equal(premature.body.decision.allowed, false); assert.equal(premature.body.state.balance, 24830000);
+  const approved = await f.send('review-transfer', { operationId: op.id, verdict: 'approve', comment: 'Клиент проверен по доверенному каналу.' }, true);
+  assert.equal(approved.body.operation.review.status, 'approved'); assert.equal(approved.body.state.balance, 24830000);
+  const duplicateConfirm = await f.send('confirm', request);
+  assert.equal(duplicateConfirm.body.operation.status, 'pending'); assert.equal(duplicateConfirm.body.state.balance, 24830000);
+  const paid = await f.send('confirm-reviewed', { operationId: op.id, amount: 99999999, recipientId: 'DEMO-RISK-001' });
+  assert.equal(paid.body.operation.status, 'completed'); assert.equal(paid.body.operation.amount, 300000);
+  assert.equal(paid.body.operation.recipientId, 'DEMO-FAMILY-001'); assert.equal(paid.body.state.balance, 24530000);
+  const duplicate = await f.send('confirm-reviewed', { operationId: op.id });
+  assert.equal(duplicate.body.duplicate, true); assert.equal(duplicate.body.state.balance, 24530000);
+});
+
+test('block class cannot be approved, directly confirmed, or resumed as reviewed', async () => {
+  const f = await modelFixture('block'), request = transfer();
+  const blocked = await f.send('attempt', { ...request, class: 'normal' });
+  assert.equal(blocked.body.operation.status, 'blocked'); assert.equal(blocked.body.decision.code, 'MODEL_BLOCK');
+  const op = blocked.body.operation;
+  assert.equal((await f.send('review-transfer', { operationId: op.id, verdict: 'approve', comment: 'Попытка обхода.' }, true)).status, 400);
+  assert.equal((await f.send('confirm-reviewed', { operationId: op.id })).body.decision.allowed, false);
+  const direct = await f.send('confirm', transfer());
+  assert.equal(direct.body.decision.code, 'MODEL_BLOCK'); assert.equal(direct.body.state.balance, 24830000);
+});
+
+test('classification is repeated at confirmation, not trusted from earlier result or browser', async () => {
+  const f = await modelFixture('normal'), request = transfer();
+  assert.equal((await f.send('attempt', request)).body.decision.allowed, true);
+  await f.send('model-mode', { mode: 'block' }, true);
+  const confirmed = await f.send('confirm', { ...request, classification: { class: 'normal' }, modelMode: 'normal' });
+  assert.equal(confirmed.body.decision.code, 'MODEL_BLOCK'); assert.equal(confirmed.body.state.balance, 24830000);
+});
+
+test('model unavailable fails closed without adding a fourth classification or debiting', async () => {
+  const f = await modelFixture('unavailable');
+  const result = await f.send('confirm', transfer());
+  assert.equal(result.body.classification, null); assert.equal(result.body.decision.code, 'MODEL_UNAVAILABLE');
+  assert.equal(result.body.operation.status, 'pending'); assert.equal(result.body.state.balance, 24830000);
+  assert.equal((await f.send('review-transfer', { operationId: result.body.operation.id, verdict: 'approve', comment: 'Недопустимое разрешение.' }, true)).status, 400);
+});
+
+test('staff rejection is terminal for original review and a reply is not an approval', async () => {
+  const f = await modelFixture('review'), result = await f.send('attempt', transfer()), id = result.body.operation.id;
+  const ticket = await f.send('ticket', { operationId: id });
+  await f.send('reply', { ticketId: ticket.body.ticket.id, reply: 'Ожидайте проверки.' }, true);
+  assert.equal((await f.send('confirm-reviewed', { operationId: id })).body.decision.allowed, false);
+  const rejected = await f.send('review-transfer', { operationId: id, verdict: 'reject', comment: 'Клиент подтвердил влияние мошенника.' }, true);
+  assert.equal(rejected.body.operation.code, 'MODEL_REVIEW_REJECTED');
+  assert.equal((await f.send('confirm-reviewed', { operationId: id })).body.state.balance, 24830000);
+  assert.equal((await f.send('review-transfer', { operationId: id, verdict: 'approve', comment: 'Нельзя изменить решение.' }, true)).status, 400);
+});
+
+test('staff approval never bypasses newly registered recipient', async () => {
+  const f = await modelFixture('review'), result = await f.send('attempt', transfer()), id = result.body.operation.id;
+  await f.send('review-transfer', { operationId: id, verdict: 'approve', comment: 'Первичная проверка завершена.' }, true);
+  await f.send('registry-add', { entry: { recipient_id: 'DEMO-FAMILY-001', display_name: 'Мама', reason: 'Новый стоп-сигнал' } }, true);
+  const stopped = await f.send('confirm-reviewed', { operationId: id });
+  assert.equal(stopped.body.decision.code, 'RISK_REGISTRY'); assert.equal(stopped.body.state.balance, 24830000);
+});
+
+test('approval expires and is invalidated by critical changes or mock mode changes', async () => {
+  for (const change of ['expiry', 'phone', 'mode']) {
+    const f = await modelFixture('review'), result = await f.send('attempt', transfer()), id = result.body.operation.id;
+    await f.send('review-transfer', { operationId: id, verdict: 'approve', comment: 'Проверка завершена.' }, true);
+    if (change === 'phone') await f.send('phone', { phone: '+7 000 000-00-02' });
+    if (change === 'mode') await f.send('model-mode', { mode: 'normal' }, true);
+    if (change === 'expiry') {
+      const state = JSON.parse(f.sql.prepare('SELECT data FROM bank_state').get().data);
+      state.operations.find(op => op.id === id).review.expiresAt = 0;
+      f.sql.prepare('UPDATE bank_state SET data = ?').run(JSON.stringify(state));
+    }
+    const response = await f.send('confirm-reviewed', { operationId: id });
+    assert.equal(response.body.decision.allowed, false, change); assert.equal(response.body.operation.review.status, 'pending', change);
+    assert.equal(response.body.state.balance, 24830000, change);
+  }
+});
+
+test('review approval cannot override active hold; normal class cannot override hold or registry', async () => {
+  const f = await modelFixture('review');
+  const pending = await f.send('attempt', transfer({ recipientId: 'DEMO-NEW-001' }));
+  await f.send('phone', { phone: '+7 000 000-00-02' });
+  assert.equal((await f.send('review-transfer', { operationId: pending.body.operation.id, verdict: 'approve', comment: 'Нельзя отменить защитную паузу.' }, true)).status, 400);
+  await f.send('model-mode', { mode: 'normal' }, true);
+  assert.equal((await f.send('attempt', transfer({ recipientId: 'DEMO-NEW-001' }))).body.decision.code, 'NEW_RECIPIENT_HOLD');
+  assert.equal((await f.send('attempt', transfer({ recipientId: 'DEMO-RISK-001' }))).body.decision.code, 'RISK_REGISTRY');
+});
+
+test('new model block or unavailable result invalidates a previously approved review', async () => {
+  for (const mode of ['block', 'unavailable']) {
+    const f = await modelFixture('review'), pending = await f.send('attempt', transfer()), id = pending.body.operation.id;
+    await f.send('review-transfer', { operationId: id, verdict: 'approve', comment: 'Первичная проверка.' }, true);
+    await f.send('model-mode', { mode }, true);
+    const result = await f.send('confirm-reviewed', { operationId: id });
+    assert.equal(result.body.decision.allowed, false);
+    assert.equal(result.body.decision.code, mode === 'block' ? 'MODEL_BLOCK' : 'MODEL_UNAVAILABLE');
+    assert.equal(result.body.state.balance, 24830000);
+  }
+});
+
+test('account security lock overrides an approved review', async () => {
+  const f = await modelFixture('review'), pending = await f.send('attempt', transfer()), id = pending.body.operation.id;
+  await f.send('review-transfer', { operationId: id, verdict: 'approve', comment: 'Проверка завершена.' }, true);
+  await f.login('client');
+  const view = await f.call('/api/state', undefined, f.client.cookie);
+  await f.send('report-security', { alertId: view.body.state.securityAlerts[0].id });
+  const blocked = await f.send('confirm-reviewed', { operationId: id });
+  assert.equal(blocked.body.decision.code, 'ACCOUNT_SECURITY_LOCK'); assert.equal(blocked.body.state.balance, 24830000);
 });
