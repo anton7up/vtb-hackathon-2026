@@ -1,4 +1,20 @@
-import { DAY, VERSION, RECIPIENTS, initialState, timeOf, protectionOf, isKnown, parseAmount, evaluate, attempt, confirmOperation, changeAccess, openTicket, replyToTicket, addRegistryEntry } from './engine.mjs';
+// Roles, balances, operations and permissions come exclusively from the server.
+async function api(path, body) {
+  const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const data = await response.json();
+  if (response.status === 401) { location.replace('/login'); throw new Error('Войдите в аккаунт'); }
+  if (!response.ok) throw new Error(data.error || 'Не удалось выполнить запрос');
+  return data;
+}
+const { user: account } = await api('/api/auth/me');
+const landing = account.role === 'employee' ? '/employee' : '/client';
+if (location.pathname !== landing) location.replace(landing);
+let { state } = await api('/api/state');
+let receivedAt = Date.now();
+const now = () => state.serverNow + Date.now() - receivedAt;
+const protectionOf = (_state, at) => { const endsAt = state.protection.endsAt; return { endsAt, active: endsAt !== null && at < endsAt, remainingMs: endsAt === null ? 0 : Math.max(0, endsAt - at) }; };
+const isKnown = (_state, id) => state.knownRecipientIds.includes(id);
+const parseAmount = value => { const text = String(value).replace(/\s/g, '').replace(',', '.'); if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return null; const cents = Math.round(Number(text) * 100); return Number.isSafeInteger(cents) && cents > 0 ? cents : null; };
 
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[x]));
@@ -20,43 +36,18 @@ const paths = {
   arrow: '<path d="M5 12h14m-5-5l5 5-5 5"/>'
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.shield}</svg>`;
-const KEY = 'antiscam-protection-v2';
-let storageAvailable = true;
-let state;
-function readState() {
-  try {
-    const value = JSON.parse(localStorage.getItem(KEY));
-    if (value?.version === VERSION && Number.isSafeInteger(value.balance) && value.balance >= 0 && Array.isArray(value.operations) && Array.isArray(value.events) && Array.isArray(value.tickets) && Array.isArray(value.registryAdditions) && Number.isFinite(value.offsetMs)) return value;
-  } catch { storageAvailable = false; }
-  return null;
-}
-state = readState() || initialState();
-let wasActive = protectionOf(state, timeOf(state)).active;
+let wasActive = protectionOf(state, now()).active;
 let baseRegistry = null;
 let registryStatus = 'loading';
-const ui = { role: new URLSearchParams(location.search).get('role') === 'employee' ? 'employee' : 'client', page: 'transfer', kind: 'transfer', recipient: 'DEMO-FAMILY-001', amount: '3 000', customId: '', customName: '', answers: {}, filter: 'all' };
+const ui = { role: account.role, page: 'transfer', kind: 'transfer', recipient: 'DEMO-FAMILY-001', amount: '3 000', customId: '', customName: '', answers: {}, filter: 'all' };
 if (ui.role === 'employee') ui.page = 'cases';
-const registry = () => baseRegistry === null ? null : [...baseRegistry, ...state.registryAdditions];
-const now = () => timeOf(state);
-const allRecipients = () => {
-  const map = new Map(RECIPIENTS.map(r => [r.id, r]));
-  for (const entry of state.registryAdditions) if (!map.has(entry.recipient_id)) map.set(entry.recipient_id, { id: entry.recipient_id, name: entry.display_name, bank: 'Демо банк', initials: 'ДП' });
-  return [...map.values()];
-};
-function persist() {
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { storageAvailable = false; }
-  $('#storage-notice').hidden = storageAvailable;
-}
-async function mutate(fn) {
-  const run = () => {
-    const stored = readState();
-    if (stored) state = stored;
-    const result = fn();
-    persist();
-    render();
-    return result;
-  };
-  return navigator.locks ? navigator.locks.request(KEY, run) : run();
+const registry = () => baseRegistry;
+const allRecipients = () => state.recipients;
+async function action(name, data = {}) {
+  const result = await api('/api/action', { ...data, action: name });
+  state = result.state; receivedAt = Date.now();
+  if (ui.role === 'employee' && ['registry-add', 'reset'].includes(name)) await loadRegistry(false);
+  render(); return result;
 }
 let toastTimer;
 function toast(text) { $('#toast').textContent = text; $('#toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 4300); }
@@ -79,7 +70,7 @@ function tick() {
     const secs = Math.ceil(remaining / 1000);
     $('#countdown').textContent = [Math.floor(secs / 3600), Math.floor(secs % 3600 / 60), secs % 60].map(x => String(x).padStart(2, '0')).join(':');
   }
-  $('#demo-clock').textContent = `${date(now())} МСК${state.offsetMs ? ' · демо-время' : ''}`;
+  if ($('#demo-clock')) $('#demo-clock').textContent = `${date(now())} МСК · серверное время демо`;
 }
 const navItems = {
   client: [['transfer', 'transfer', 'Переводы'], ['security', 'lock', 'Безопасность'], ['history', 'history', 'История']],
@@ -95,11 +86,10 @@ const titles = {
 };
 function render() {
   wasActive = protectionOf(state, now()).active;
-  $('#storage-notice').hidden = storageAvailable;
-  document.querySelectorAll('[data-role]').forEach(b => { b.classList.toggle('active', b.dataset.role === ui.role); b.setAttribute('aria-pressed', b.dataset.role === ui.role ? 'true' : 'false'); });
+  if (!navItems[account.role].some(([id]) => id === ui.page)) ui.page = account.role === 'employee' ? 'cases' : 'transfer';
   $('#nav-caption').textContent = ui.role === 'client' ? 'МОЙ БАНК' : 'РАБОЧЕЕ МЕСТО';
   $('#eyebrow').textContent = ui.role === 'client' ? 'ЛИЧНЫЙ КАБИНЕТ' : 'АНТИФРОД · ДЕМО СОТРУДНИКА';
-  $('#profile-name').textContent = ui.role === 'client' ? 'Анна Ковалёва' : 'Сотрудник антифрода';
+  $('#profile-name').textContent = account.name;
   $('#profile-description').textContent = ui.role === 'client' ? 'Демонстрационный клиент' : 'Клиент: Анна Ковалёва';
   $('#navigation').innerHTML = navItems[ui.role].map(([id, symbol, title]) => `<button type="button" data-page="${id}" class="${ui.page === id ? 'active' : ''}" ${ui.page === id ? 'aria-current="page"' : ''}>${icon(symbol)}${title}</button>`).join('');
   $('#page-title').textContent = titles[ui.page][0]; $('#page-description').textContent = titles[ui.page][1];
@@ -127,8 +117,7 @@ function updateRecipientInfo() {
   if (!$('#recipient-info')) return;
   const request = requestFromForm();
   const known = isKnown(state, request.recipientId, now());
-  const match = registry()?.find(e => e.status === 'active' && e.recipient_id === request.recipientId);
-  $('#recipient-info').innerHTML = `<span class="pill ${known ? 'green' : 'blue'}">${icon('user')}${known ? 'Прежний получатель' : 'Новый получатель'}</span><span class="pill ${registryStatus !== 'ready' ? 'amber' : match ? 'red' : 'green'}">${icon(match ? 'alert' : 'shield')}${registryStatus !== 'ready' ? 'Реестр: проверка недоступна' : match ? 'Есть в демо-реестре' : 'Нет совпадений в реестре'}</span><span class="pill">${esc(request.recipientId || 'Демо-ID не указан')}</span>`;
+  $('#recipient-info').innerHTML = `<span class="pill ${known ? 'green' : 'blue'}">${icon('user')}${known ? 'Прежний получатель' : 'Новый получатель'}</span><span class="pill">${icon('shield')}Проверка перед отправкой</span><span class="pill">${esc(request.recipientId || 'Демо-ID не указан')}</span>`;
 }
 function statusPill(op) { return `<span class="pill ${op.status === 'completed' ? 'green' : op.status === 'pending' ? 'amber' : 'red'}">${op.status === 'completed' ? 'Выполнено' : op.status === 'pending' ? 'На проверке' : 'Остановлено'}</span>`; }
 function operationsTable(ops, employee = false, title = 'Операции') {
@@ -167,7 +156,8 @@ function decisionDialog(decision, request, operation, readOnly = false) {
 let pendingRequest = null;
 async function submitOperation() {
   const request = requestFromForm();
-  const result = await mutate(() => attempt(state, request, registry(), now()));
+  if (request.amount === null) { $('#form-error').textContent = 'Введите положительную сумму, не более двух знаков после запятой.'; return; }
+  const result = await action('attempt', request);
   if (['INVALID_AMOUNT', 'INVALID_RECIPIENT', 'INVALID_KIND'].includes(result.decision.code)) { $('#form-error').textContent = result.decision.reason; return; }
   if (!result.decision.allowed) { decisionDialog(result.decision, request, result.operation); return; }
   pendingRequest = { ...request, requestId: crypto.randomUUID() };
@@ -177,29 +167,29 @@ document.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;
   try {
     if (b.hasAttribute('data-close')) { closeDialog(); return; }
-    if (b.dataset.role) { ui.role = b.dataset.role; ui.page = ui.role === 'client' ? 'transfer' : 'cases'; const url = new URL(location.href); url.searchParams.set('role', ui.role); history.replaceState(null, '', url); render(); }
+    if (b.id === 'logout') { await api('/api/auth/logout', {}); location.replace('/login'); return; }
     if (b.dataset.page) { ui.page = b.dataset.page; render(); }
     if (b.dataset.kind) { ui.kind = b.dataset.kind; render(); }
     if (b.id === 'demo-change' || b.hasAttribute('data-change-phone')) phoneDialog();
     if (b.id === 'demo-forward') {
-      await mutate(() => { state.offsetMs += DAY; state.events.unshift({ id: `EVENT-${state.nextId++}`, at: now(), actor: 'Демонстратор', type: 'time', text: 'Демо-время перемотано на 24 часа. Остановленные операции не отправлены.' }); });
+      await action('advance');
       toast('Прошло 24 часа. Новые операции снова проходят обычную проверку.');
     }
     if (b.id === 'demo-reset') showDialog('Начать демонстрацию заново?', '<p>Сбросится только это демо: баланс, операции, обращения, добавленные записи реестра и таймер. Базовые пять записей останутся.</p><div class="dialog-actions"><button type="button" class="button subtle" data-close>Отмена</button><button type="button" class="button" id="confirm-reset">Начать заново</button></div>', 'history');
-    if (b.id === 'confirm-reset') { await mutate(() => { state = initialState(); ui.recipient = 'DEMO-FAMILY-001'; ui.amount = '3 000'; ui.kind = 'transfer'; ui.answers = {}; }); pendingRequest = null; closeDialog(); toast('Демонстрация начата заново'); }
+    if (b.id === 'confirm-reset') { await action('reset'); ui.recipient = 'DEMO-FAMILY-001'; ui.amount = '3 000'; ui.kind = 'transfer'; ui.answers = {}; pendingRequest = null; closeDialog(); toast('Демонстрация начата заново'); }
     if (b.id === 'restore-access') showDialog('Восстановить доступ?', '<p>Это демонстрация смены способа подтверждения. Начнётся новая пауза на 24 часа для новых получателей и наличных.</p><div class="dialog-actions"><button type="button" class="button subtle" data-close>Отмена</button><button class="button" type="button" id="confirm-recovery">Восстановить доступ</button></div>', 'lock');
-    if (b.id === 'confirm-recovery') { await mutate(() => changeAccess(state, 'recovery', now())); closeDialog(); toast('Доступ восстановлен. Защитная пауза — 24 часа.'); }
+    if (b.id === 'confirm-recovery') { await action('recovery'); closeDialog(); toast('Доступ восстановлен. Защитная пауза — 24 часа.'); }
     if (b.id === 'confirm-operation' && pendingRequest) {
       b.disabled = true;
       const request = pendingRequest; pendingRequest = null;
-      const result = await mutate(() => confirmOperation(state, request, registry(), now()));
+      const result = await action('confirm', request);
       decisionDialog(result.decision, request, result.operation);
     }
     if (b.dataset.operation) {
       const op = state.operations.find(x => x.id === b.dataset.operation);
       if (op) decisionDialog({ code: op.code, reason: op.reason, endsAt: op.holdEndsAt, registryReason: op.registryReason }, { kind: op.kind, recipientName: op.recipientName, amount: op.amount }, op, true);
     }
-    if (b.dataset.support) { await mutate(() => openTicket(state, b.dataset.support, now())); closeDialog(); ui.page = 'history'; render(); toast('Обращение создано. Оно доступно сотруднику банка.'); }
+    if (b.dataset.support) { await action('ticket', { operationId: b.dataset.support }); closeDialog(); ui.page = 'history'; render(); toast('Обращение создано. Оно доступно сотруднику банка.'); }
     if (b.id === 'retry-registry') await loadRegistry();
   } catch (err) { toast(err.message); }
 });
@@ -220,28 +210,43 @@ document.addEventListener('submit', async e => {
     if (e.target.id === 'phone-form') {
       const phone = $('#new-phone').value.trim();
       if (!/^\+?[\d ()-]{10,25}$/.test(phone) || phone.replace(/\D/g, '').length !== 11 || phone.replace(/\D/g, '') === state.phone.replace(/\D/g, '')) { $('#phone-error').textContent = 'Укажите другой номер из 11 цифр.'; return; }
-      await mutate(() => changeAccess(state, 'phone', now(), phone)); closeDialog(); toast('Номер изменён. Защитная пауза включена на 24 часа.');
+      await action('phone', { phone }); closeDialog(); toast('Номер изменён. Защитная пауза включена на 24 часа.');
     }
     if (e.target.id === 'registry-form') {
       const entry = { recipient_id: $('#registry-id').value, display_name: $('#registry-name').value, reason: $('#registry-reason').value };
-      try { await mutate(() => addRegistryEntry(state, entry, registry(), now())); toast('Получатель добавлен в реестр. Проверка уже действует.'); }
+      try { await action('registry-add', { entry }); toast('Получатель добавлен в реестр. Проверка уже действует.'); }
       catch (err) { $('#registry-error').textContent = err.message; }
     }
-    if (e.target.dataset.ticket) { const id = e.target.dataset.ticket; const reply = ui.answers[id] || ''; await mutate(() => replyToTicket(state, id, reply, now())); toast('Ответ отправлен клиенту'); }
+    if (e.target.dataset.ticket) { const id = e.target.dataset.ticket; const reply = ui.answers[id] || ''; await action('reply', { ticketId: id, reply }); toast('Ответ отправлен клиенту'); }
   } catch (err) { toast(err.message); }
 });
-window.addEventListener('storage', e => { if (e.key === KEY) { const value = readState(); if (value) { state = value; render(); } } });
-async function loadRegistry() {
+async function loadRegistry(redraw = true) {
+  if (account.role !== 'employee') return;
   registryStatus = 'loading';
   try {
-    const response = await fetch('./data/suspicious_recipients.json', { cache: 'no-store', signal: AbortSignal.timeout(8000) });
-    if (!response.ok) throw new Error('Не удалось загрузить реестр');
-    const data = await response.json();
-    if (!data.is_synthetic || !Array.isArray(data.entries) || !data.entries.every(e => typeof e.recipient_id === 'string' && typeof e.reason === 'string' && ['active', 'inactive'].includes(e.status))) throw new Error('Некорректный реестр');
+    const data = await api('/api/registry');
     baseRegistry = data.entries; registryStatus = 'ready';
   } catch { baseRegistry = null; registryStatus = 'error'; }
-  render();
+  if (redraw) render();
 }
 $('#dialog').addEventListener('close', () => { pendingRequest = null; });
-persist(); render(); loadRegistry();
+render(); if (account.role === 'employee') loadRegistry();
 setInterval(() => { const active = protectionOf(state, now()).active; if (active !== wasActive) { wasActive = active; render(); } else tick(); }, 1000);
+let refreshing = false;
+setInterval(async () => {
+  if (refreshing || document.hidden) return;
+  refreshing = true;
+  try {
+    const me = await api('/api/auth/me');
+    if (me.user.id !== account.id) { location.replace(me.user.role === 'employee' ? '/employee' : '/client'); return; }
+    const data = await api('/api/state');
+    $('#connection-notice').hidden = true;
+    if (data.state.revision !== state.revision) {
+      state = data.state; receivedAt = Date.now();
+      if (account.role === 'employee') await loadRegistry(false);
+      // Keep an unfinished form intact; the next submit still checks the server's current state.
+      if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) render(); else renderBanner();
+    }
+  } catch { $('#connection-notice').hidden = false; }
+  finally { refreshing = false; }
+}, 4000);

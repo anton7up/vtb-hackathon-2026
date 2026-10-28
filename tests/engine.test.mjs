@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DAY, initialState, protectionOf, isKnown, parseAmount, changeAccess, attempt, confirmOperation, openTicket, replyToTicket, addRegistryEntry } from '../dist/engine.mjs';
+import { DAY, initialState, protectionOf, isKnown, parseAmount, changeAccess, attempt, confirmOperation, openTicket, replyToTicket, addRegistryEntry } from '../lib/bank-engine.mjs';
 const t = Date.parse('2026-10-28T09:00:00Z');
 const transfer = (id = 'DEMO-NEW-001', amount = 100000) => ({ kind: 'transfer', recipientId: id, recipientName: 'Получатель', amount });
 const risky = [{ recipient_id: 'DEMO-RISK-002', status: 'active', reason: 'Демо-фишинг', reason_code: 'TEST' }];
