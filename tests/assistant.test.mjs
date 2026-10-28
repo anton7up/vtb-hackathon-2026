@@ -29,3 +29,22 @@ test('adapter rejects truncated JSON and refuses missing key without a request',
   await assert.rejects(assessConversation(c, {}), e => e.code === 'not_configured');
   await assert.rejects(assessConversation(c, { GROQ_API_KEY: 'fake', fetcher: async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'length', message: { content: '{}' } }] })) }), e => e.code === 'invalid_response');
 });
+
+test('provider schema failures have one bounded retry and never use failed generation', async () => {
+  const c = { context: null, turns: [{ message: 'Тест', status: 'processing' }] };
+  let calls = 0;
+  await assert.rejects(assessConversation(c, { GROQ_API_KEY: 'fake', fetcher: async () => {
+    calls++;
+    return new Response(JSON.stringify({ error: { code: 'json_validate_failed', failed_generation: '{"class":"normal"}' } }), { status: 400 });
+  } }), e => e.code === 'unavailable');
+  assert.equal(calls, 2);
+});
+
+test('non-schema errors are not retried', async () => {
+  const c = { context: null, turns: [{ message: 'Тест', status: 'processing' }] };
+  let calls = 0;
+  await assert.rejects(assessConversation(c, { GROQ_API_KEY: 'fake', fetcher: async () => {
+    calls++; return new Response('{}', { status: 429 });
+  } }), e => e.code === 'quota');
+  assert.equal(calls, 1);
+});
