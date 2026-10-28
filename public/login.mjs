@@ -17,3 +17,4 @@ document.querySelector('#toggle-password').addEventListener('click', () => {
   button.textContent = input.type === 'password' ? 'Показать' : 'Скрыть';
   button.setAttribute('aria-label', `${button.textContent} пароль`);
 });
+document.querySelector('#login-submit').disabled = false;

@@ -231,6 +231,7 @@ async function loadRegistry(redraw = true) {
 }
 $('#dialog').addEventListener('close', () => { pendingRequest = null; });
 render(); if (account.role === 'employee') loadRegistry();
+$('#logout').disabled = false;
 setInterval(() => { const active = protectionOf(state, now()).active; if (active !== wasActive) { wasActive = active; render(); } else tick(); }, 1000);
 let refreshing = false;
 setInterval(async () => {

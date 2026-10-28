@@ -5,7 +5,7 @@ export default function DashboardShell({ user }: { user: { role: string; name: s
     <header className="topbar">
       <a className="brand" href="/"><img src="/shield.svg" width="35" height="35" alt="" /><span>АнтиСкам<span className="brand-sub">Деньги под защитой</span></span></a>
       <span className={`account-badge ${employee ? 'staff' : ''}`}>{employee ? 'Сотрудник банка' : 'Кабинет клиента'}</span>
-      <div className="top-meta"><span className="login-name">{user.login}</span><button type="button" className="button subtle small" id="logout">Выйти</button></div>
+      <div className="top-meta"><span className="login-name">{user.login}</span><button type="button" className="button subtle small" id="logout" disabled>Выйти</button></div>
     </header>
     <div className="app-shell">
       <aside className="sidebar"><p className="nav-label" id="nav-caption">{employee ? 'РАБОЧЕЕ МЕСТО' : 'МОЙ БАНК'}</p><nav id="navigation" aria-label="Разделы кабинета"></nav><div className="sidebar-bottom"><span className="live-dot"></span><b>Защита активна</b><p>Проверка каждой операции</p><span className="version">Хакатон · прототип 03</span></div></aside>
