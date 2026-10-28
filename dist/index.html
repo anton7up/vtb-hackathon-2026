@@ -1,68 +1,40 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>АнтиСкам — демо-прототип</title>
-  <style>
-    :root { --blue:#0b66e3; --navy:#112443; --muted:#6b7a90; --line:#e8edf4; --bg:#f4f7fb; --mint:#e8f8f2; --orange:#fff3df; --rose:#ffebee; }
-    * { box-sizing:border-box; } body { margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--navy); background:var(--bg); }
-    header { background:#fff; border-bottom:1px solid var(--line); height:68px; display:flex; align-items:center; padding:0 max(24px, calc((100vw - 1200px)/2)); gap:34px; position:sticky; top:0; z-index:4; }
-    .brand { display:flex; align-items:center; gap:10px; font-size:20px; font-weight:800; color:#0a4dad; white-space:nowrap; } .brand-mark { width:29px; height:22px; transform:skew(-23deg); border-top:7px solid #0b66e3; border-bottom:7px solid #0b66e3; border-left:7px solid transparent; }
-    nav { display:flex; gap:22px; font-size:14px; color:#52627a; } nav a { cursor:pointer; } nav a:hover { color:var(--blue); }
-    .demo-pill { margin-left:auto; background:#edf4ff; color:#2464ba; padding:7px 11px; border-radius:20px; font-size:12px; font-weight:700; }
-    main { max-width:1200px; margin:0 auto; padding:34px 24px 56px; } .hero { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:24px; gap:20px; } h1 { margin:0 0 8px; font-size:32px; letter-spacing:-1px; } .hero p { margin:0; color:var(--muted); max-width:630px; line-height:1.5; } .notice { color:#55708e; font-size:12px; text-align:right; }
-    .scenario-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:20px 0 28px; } .scenario { text-align:left; background:#fff; border:1px solid var(--line); padding:14px; border-radius:14px; cursor:pointer; color:var(--navy); transition:.18s; } .scenario:hover, .scenario.active { border-color:#4e96ff; box-shadow:0 7px 18px #0b66e312; transform:translateY(-1px); } .scenario b { display:block; font-size:14px; margin-bottom:4px; } .scenario span { color:var(--muted); font-size:12px; line-height:1.3; }
-    .layout { display:grid; grid-template-columns:1.15fr .85fr; gap:22px; align-items:start; } .card { background:#fff; border:1px solid var(--line); border-radius:18px; padding:24px; box-shadow:0 7px 24px rgba(15,44,82,.04); } .card h2 { font-size:19px; margin:0 0 18px; } .transfer-top { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:18px; } .account { display:flex; gap:11px; align-items:center; } .avatar { width:40px; height:40px; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:800; background:linear-gradient(135deg,#2583ff,#5d39d9); } .account small { display:block; color:var(--muted); margin-top:3px; }
-    label { color:#53647d; font-size:12px; font-weight:650; display:block; margin:15px 0 6px; } input { width:100%; padding:13px 14px; border:1px solid #d7e0eb; border-radius:10px; font-size:15px; color:var(--navy); background:#fff; outline:none; } input:focus{ border-color:#4e96ff; box-shadow:0 0 0 3px #e7f1ff; } .two { display:grid; grid-template-columns:1.1fr .9fr; gap:14px; }
-    .signals { margin-top:20px; display:flex; flex-wrap:wrap; gap:8px; } .signal { background:#f3f6fa; color:#52627a; border-radius:18px; padding:7px 10px; font-size:12px; } .signal.active { color:#9a5b00; background:#fff2d7; } .btn { width:100%; border:0; border-radius:11px; padding:14px 16px; margin-top:22px; font-weight:750; font-size:15px; color:#fff; background:var(--blue); cursor:pointer; } .btn:hover { background:#0859c7; } .btn.secondary { background:#edf4ff; color:#0b66e3; margin-top:10px; }
-    .risk-head { display:flex; align-items:center; justify-content:space-between; } .risk-badge { padding:7px 10px; border-radius:18px; font-size:12px; font-weight:800; } .risk-badge.low{ background:var(--mint); color:#138667; }.risk-badge.medium{background:var(--orange);color:#a76700}.risk-badge.high{background:var(--rose);color:#bd3648} .gauge { display:flex; align-items:center; justify-content:center; margin:22px auto; width:166px; height:166px; border-radius:50%; background:conic-gradient(var(--blue) var(--score),#eaf0f7 0); position:relative; } .gauge:before { content:""; position:absolute; inset:13px; border-radius:50%; background:#fff; } .score { position:relative; text-align:center; font-size:34px; font-weight:850; } .score small { display:block; color:var(--muted); font-size:12px; font-weight:600; margin-top:-3px; }
-    .explain { border-top:1px solid var(--line); padding-top:17px; } .reason { display:flex; gap:10px; padding:11px 0; border-bottom:1px solid #f1f4f7; font-size:13px; line-height:1.35; } .reason:last-child{border:0}.dot { width:9px;height:9px;border-radius:50%;background:#f5a623;margin-top:4px;flex:0 0 auto; }.dot.red{background:#ec5b68}.dot.green{background:#1eb886}
-    .action { margin-top:20px; padding:14px; background:#f7faff; border-radius:12px; font-size:13px; line-height:1.45; }.action b { display:block; margin-bottom:4px; }
-    .dashboard { margin-top:24px; }.stats { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }.stat { background:#fff; border:1px solid var(--line); border-radius:15px; padding:18px; }.stat span { font-size:12px;color:var(--muted); }.stat strong { display:block;font-size:24px;margin:7px 0 3px; }.stat small{color:#168364;font-weight:700}.stat small.orange{color:#b26f00}
-    .table-card { margin-top:16px; background:#fff;border:1px solid var(--line);border-radius:15px;padding:18px;overflow:auto; }.table-card h3{font-size:15px;margin:0 0 12px;} table{border-collapse:collapse;width:100%;font-size:13px;min-width:650px;} th{text-align:left;color:#78869b;font-weight:600;padding:9px;border-bottom:1px solid var(--line)}td{padding:11px 9px;border-bottom:1px solid #f0f3f7}.tag{padding:4px 7px;border-radius:12px;font-size:11px;font-weight:750}.tag.ok{background:var(--mint);color:#138667}.tag.warn{background:var(--orange);color:#a76700}.tag.stop{background:var(--rose);color:#bd3648}
-    .modal { position:fixed;inset:0;background:#11244370;display:none;place-items:center;padding:20px;z-index:5; }.modal.open{display:grid}.modal-box{max-width:475px;width:100%;background:#fff;border-radius:19px;padding:27px;box-shadow:0 20px 70px #0004}.modal-icon{font-size:31px}.modal-box h2{margin:10px 0 9px;font-size:23px}.modal-box p{color:#607087;line-height:1.48;font-size:14px}.steps{padding:0;margin:18px 0;list-style:none;counter-reset:steps}.steps li{counter-increment:steps;margin:12px 0;padding-left:32px;position:relative;font-size:13px;line-height:1.35}.steps li:before{content:counter(steps);position:absolute;left:0;top:-2px;width:21px;height:21px;border-radius:50%;display:grid;place-items:center;background:#e9f2ff;color:#0b66e3;font-weight:800;font-size:11px}.modal-actions{display:flex;gap:10px}.modal-actions .btn{margin-top:0}.modal-actions .btn:first-child{background:#eff4fb;color:#135dc3}
-    @media(max-width:780px){header{padding:0 16px}nav{display:none}main{padding:24px 16px}.hero{display:block}.notice{text-align:left;margin-top:12px}.scenario-row{grid-template-columns:1fr 1fr}.layout{grid-template-columns:1fr}.stats{grid-template-columns:1fr}.two{grid-template-columns:1fr}.demo-pill{display:none}}
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Интерактивный прототип защиты переводов: два кабинета, защитная пауза и демонстрационный реестр получателей.">
+  <title>АнтиСкам — защита ваших денег</title>
+  <link rel="icon" type="image/svg+xml" href="./shield.svg">
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <header><div class="brand"><span class="brand-mark"></span>АнтиСкам</div><nav><a href="#transfer">Перевод</a><a href="#analytics">Аналитика</a><a href="#how">Как работает</a></nav><span class="demo-pill">ДЕМО-РЕЖИМ · ХАКАТОН</span></header>
-  <main>
-    <section class="hero"><div><h1>Защита перевода без лишних блокировок</h1><p>Прототип подбирает способ защиты по риску операции: от незаметной проверки до помощи банка и подтверждения близкого.</p></div><div class="notice">Все операции и метрики — демонстрационные</div></section>
-    <section class="scenario-row" aria-label="Демо-сценарии">
-      <button class="scenario active" data-case="bike"><b>🚲 Покупка велосипеда</b><span>Легальная крупная покупка</span></button>
-      <button class="scenario" data-case="scam"><b>☎️ «Безопасный счёт»</b><span>Социальная инженерия</span></button>
-      <button class="scenario" data-case="hack"><b>🔐 Взлом аккаунта</b><span>Новое устройство и получатель</span></button>
-      <button class="scenario" data-case="family"><b>👨‍👩‍👧 Перевод близкому</b><span>Привычная операция</span></button>
-    </section>
-    <section class="layout" id="transfer">
-      <article class="card"><div class="transfer-top"><div class="account"><div class="avatar">АК</div><div><b>Анна Ковалёва</b><small>Счёт •• 4812 · 248 300 ₽</small></div></div><b style="color:#0b66e3">Перевод по СБП</b></div>
-        <div class="two"><div><label for="recipient">Получатель</label><input id="recipient" value="Иван М. · Т-Банк" /></div><div><label for="amount">Сумма, ₽</label><input id="amount" value="47 500" inputmode="numeric" /></div></div>
-        <label for="purpose">Сообщение получателю</label><input id="purpose" value="Оплата велосипеда" />
-        <div class="signals" id="signals"></div><button class="btn" id="continue">Проверить и продолжить</button>
-      </article>
-      <aside class="card"><div class="risk-head"><h2>Оценка операции</h2><span id="badge" class="risk-badge medium">СРЕДНИЙ РИСК</span></div><div class="gauge" id="gauge"><div class="score"><span id="score">54</span><small>из 100</small></div></div><div class="explain" id="reasons"></div><div class="action" id="action"></div></aside>
-    </section>
-    <section class="dashboard" id="analytics"><div class="hero"><div><h1 style="font-size:23px">Кабинет антифрод-аналитика</h1><p>Сигналы объяснимы: видно, что привело к действию, а не только итоговый балл.</p></div></div>
-      <div class="stats"><div class="stat"><span>Предотвращённый ущерб</span><strong>2,4 млн ₽</strong><small>↑ 12,8% к базовой модели</small></div><div class="stat"><span>Операции с мягкой проверкой</span><strong>3,1%</strong><small class="orange">вместо блокировки</small></div><div class="stat"><span>Ложные ограничения</span><strong>0,7%</strong><small>↓ 21% в демо-выборке</small></div></div>
-      <div class="table-card"><h3>Последние решения</h3><table><thead><tr><th>Операция</th><th>Сумма</th><th>Сигналы</th><th>Решение</th><th>Статус</th></tr></thead><tbody id="table"></tbody></table></div>
-    </section>
-  </main>
-  <div class="modal" id="modal"><div class="modal-box"><div class="modal-icon" id="modalIcon">🛡️</div><h2 id="modalTitle"></h2><p id="modalText"></p><ol class="steps" id="modalSteps"></ol><div class="modal-actions"><button class="btn" id="safeAction"></button><button class="btn secondary" id="closeModal">Вернуться к переводу</button></div></div></div>
-  <script>
-    const cases={
-      bike:{recipient:'Иван М. · Т-Банк',amount:'47 500',purpose:'Оплата велосипеда',score:54,risk:'medium',badge:'СРЕДНИЙ РИСК',signals:['Новый получатель','Сумма выше обычной','Смена номера вчера'],reasons:[['red','Новый получатель','Переводов этому человеку ранее не было.'],['dot','Нетипичная сумма','Сумма выше обычных переводов Анны.'],['green','Понятное назначение','Платёж связан с разовой покупкой.']],action:['Мягкая проверка','Подтвердите, что переводите деньги за товар, а не по просьбе неизвестного собеседника.'],modal:{icon:'🚲',title:'Проверим намерение',text:'Перевод выглядит необычно, но это не означает мошенничество. Убедимся, что вы совершаете покупку самостоятельно.',steps:['Вы лично выбрали товар и общались с продавцом?','Никто не просил перевести деньги на «безопасный счёт»?','После подтверждения перевод будет проведён.'],button:'Подтвердить покупку'}},
-      scam:{recipient:'Алексей В. · другой банк',amount:'185 000',purpose:'Перевод средств',score:91,risk:'high',badge:'ВЫСОКИЙ РИСК',signals:['Новый получатель','Нетипичная сумма','Серия переводов','Риск реквизитов'],reasons:[['red','Серия нетипичных действий','Перед переводом был вход с нового устройства.'],['red','Риск реквизитов','Получатель связан с подозрительной активностью в демо-базе.'],['dot','Срочная крупная операция','Сумма превышает обычный дневной объём.']],action:['Пауза безопасности','Не переводите деньги, если вас торопят или просят сохранить разговор в тайне.'],modal:{icon:'⚠️',title:'Похоже на схему «безопасный счёт»',text:'Сочетание сигналов похоже на перевод под влиянием мошенников. Настоящий банк не просит переводить деньги для защиты счёта.',steps:['Поставьте разговор с незнакомцем на паузу.','Позвоните в банк по номеру с обратной стороны карты.','При необходимости подключите близкого к подтверждению.'],button:'Связаться с банком'}},
-      hack:{recipient:'Мария С. · СБП',amount:'96 000',purpose:'',score:82,risk:'high',badge:'ВЫСОКИЙ РИСК',signals:['Новое устройство','Новая география','Новый получатель','Ночная операция'],reasons:[['red','Новое устройство','Операция создана с устройства, которое не использовалось ранее.'],['red','Изменение географии','Регион входа отличается от обычного.'],['dot','Новый получатель','Истории переводов получателю нет.']],action:['Дополнительная защита','Для продолжения требуется безопасное подтверждение личности.'],modal:{icon:'🔐',title:'Нужно подтвердить личность',text:'Операция создана в необычных условиях. Мы временно остановили её, чтобы защитить счёт.',steps:['Подтвердите вход в приложении на привычном устройстве.','Если это не вы — немедленно заблокируйте доступ.','После подтверждения операция будет пересмотрена.'],button:'Подтвердить личность'}},
-      family:{recipient:'Мама · ВТБ',amount:'3 000',purpose:'На лекарства',score:12,risk:'low',badge:'НИЗКИЙ РИСК',signals:['Знакомый получатель','Привычная сумма','Обычное устройство'],reasons:[['green','Знакомый получатель','Регулярные переводы этому получателю.'],['green','Привычный сценарий','Сумма и время соответствуют истории.'],['green','Доверенное устройство','Вход выполнен с известного устройства.']],action:['Перевод можно провести','Проверка прошла незаметно. Дополнительных действий не требуется.'],modal:{icon:'✓',title:'Перевод готов к отправке',text:'Проверка не выявила существенных рисков. Деньги поступят получателю мгновенно.',steps:['Проверьте имя получателя.','Подтвердите перевод.'],button:'Отправить 3 000 ₽'}}
-    };
-    const activity=[['Сегодня, 10:42','47 500 ₽','Новый получатель, сумма','Мягкая проверка','warn'],['Сегодня, 10:15','185 000 ₽','Риск реквизитов, новое устройство','Пауза безопасности','stop'],['Вчера, 19:02','3 000 ₽','Знакомый получатель','Проведена','ok'],['Вчера, 12:36','96 000 ₽','Новое устройство, география','Подтверждение личности','stop']];
-    let current='bike'; const $=s=>document.querySelector(s);
-    function renderTable(){ $('#table').innerHTML=activity.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td><td>${x[2]}</td><td>${x[3]}</td><td><span class="tag ${x[4]}">${x[4]==='ok'?'Проведена':x[4]==='warn'?'Подтверждена':'На проверке'}</span></td></tr>`).join(''); }
-    function selectCase(key){ current=key;const d=cases[key]; $('#recipient').value=d.recipient;$('#amount').value=d.amount;$('#purpose').value=d.purpose; $('#score').textContent=d.score; $('#badge').textContent=d.badge; $('#badge').className='risk-badge '+d.risk; $('#gauge').style.setProperty('--score',d.score+'%'); $('#signals').innerHTML=d.signals.map((x,i)=>`<span class="signal ${i<2?'active':''}">${x}</span>`).join(''); $('#reasons').innerHTML=d.reasons.map(r=>`<div class="reason"><span class="dot ${r[0]==='dot'?'':r[0]}"></span><div><b>${r[1]}</b><br><span style="color:#6b7a90">${r[2]}</span></div></div>`).join('');$('#action').innerHTML=`<b>${d.action[0]}</b>${d.action[1]}`; document.querySelectorAll('.scenario').forEach(x=>x.classList.toggle('active',x.dataset.case===key));}
-    function openModal(){const m=cases[current].modal;$('#modalIcon').textContent=m.icon;$('#modalTitle').textContent=m.title;$('#modalText').textContent=m.text;$('#modalSteps').innerHTML=m.steps.map(x=>`<li>${x}</li>`).join('');$('#safeAction').textContent=m.button;$('#modal').classList.add('open');}
-    document.querySelectorAll('.scenario').forEach(x=>x.addEventListener('click',()=>selectCase(x.dataset.case))); $('#continue').addEventListener('click',openModal);$('#closeModal').addEventListener('click',()=>$('#modal').classList.remove('open'));$('#safeAction').addEventListener('click',()=>{ $('#modal').classList.remove('open'); alert(current==='family'||current==='bike'?'Демо: операция подтверждена.':'Демо: безопасный сценарий запущен.'); });
-    renderTable();selectCase(current);
-  </script>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="АнтиСкам, главная"><img src="./shield.svg" width="35" height="35" alt=""><span>АнтиСкам<span class="brand-sub">Деньги под защитой</span></span></a>
+    <div class="role-switch" role="group" aria-label="Демонстрационная роль">
+      <button type="button" data-role="client" class="active" aria-pressed="true">Клиент</button>
+      <button type="button" data-role="employee" aria-pressed="false">Сотрудник банка</button>
+    </div>
+    <div class="top-meta"><span class="demo-tag"><i></i> ДЕМО</span><span class="user-icon">АК</span></div>
+  </header>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <p class="nav-label" id="nav-caption">МОЙ БАНК</p>
+      <nav id="navigation" aria-label="Разделы кабинета"></nav>
+      <div class="sidebar-bottom"><span class="live-dot"></span><b>Защита активна</b><p>Каждая операция проходит проверку</p><span class="version">Хакатон · прототип 02</span></div>
+    </aside>
+    <main>
+      <div class="page-heading"><div><span class="eyebrow" id="eyebrow">ЛИЧНЫЙ КАБИНЕТ</span><h1 id="page-title">Переводы и наличные</h1><p id="page-description">Управляйте деньгами. Мы позаботимся о проверке.</p></div><div class="profile"><span class="user-icon">АК</span><div><b id="profile-name">Анна Ковалёва</b><small id="profile-description">Демонстрационный клиент</small></div></div></div>
+      <section class="demo-tools" aria-label="Управление демонстрацией"><span class="tools-label">Сценарий для жюри</span><button type="button" id="demo-change">Сменить номер</button><button type="button" id="demo-forward">Перемотать 24 часа</button><button type="button" id="demo-reset" class="text-button">Начать заново</button><span id="demo-clock"></span></section>
+      <div id="storage-notice" class="notice warning" hidden>Хранение в браузере недоступно. Изменения сохранятся только до закрытия страницы.</div>
+      <section class="protection-banner" id="protection-banner" aria-label="Статус защитной паузы"></section>
+      <div id="workspace"></div>
+      <footer>Учебный прототип. Деньги, получатели и реестр вымышлены. 24 часа — правило демо.<span>Роли и данные общие для вкладок одного браузера; это не банковская авторизация.</span></footer>
+    </main>
+  </div>
+  <dialog id="dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <noscript>Для работы интерактивного прототипа включите JavaScript в браузере.</noscript>
+  <script type="module" src="./app.mjs"></script>
 </body>
 </html>

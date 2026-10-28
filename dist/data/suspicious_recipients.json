@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "registry_id": "demo-risk-registry",
+  "is_synthetic": true,
+  "description": "Вымышленные получатели для хакатонного прототипа. Не является базой Банка России.",
+  "matching_field": "recipient_id",
+  "entries": [
+    {
+      "recipient_id": "DEMO-RISK-001",
+      "display_name": "Демо получатель 1",
+      "status": "active",
+      "reason_code": "DEMO_CONFIRMED_FRAUD_REPORT",
+      "reason": "Смоделированное подтверждённое обращение о мошенническом переводе",
+      "scenario": "safe_account_scam",
+      "action": "block_transfer",
+      "source": "synthetic_hackathon_data"
+    },
+    {
+      "recipient_id": "DEMO-RISK-002",
+      "display_name": "Демо получатель 2",
+      "status": "active",
+      "reason_code": "DEMO_PHISHING_REPORT",
+      "reason": "Смоделированная связь получателя с фишинговой схемой",
+      "scenario": "phishing",
+      "action": "block_transfer",
+      "source": "synthetic_hackathon_data"
+    },
+    {
+      "recipient_id": "DEMO-RISK-003",
+      "display_name": "Демо получатель 3",
+      "status": "active",
+      "reason_code": "DEMO_ACCOUNT_TAKEOVER_REPORT",
+      "reason": "Смоделированная связь с переводом из захваченного аккаунта",
+      "scenario": "account_takeover",
+      "action": "block_transfer",
+      "source": "synthetic_hackathon_data"
+    },
+    {
+      "recipient_id": "DEMO-RISK-004",
+      "display_name": "Демо получатель 4",
+      "status": "active",
+      "reason_code": "DEMO_INVESTMENT_SCAM_REPORT",
+      "reason": "Смоделированное обращение об инвестиционном обмане",
+      "scenario": "investment_scam",
+      "action": "block_transfer",
+      "source": "synthetic_hackathon_data"
+    },
+    {
+      "recipient_id": "DEMO-RISK-005",
+      "display_name": "Демо получатель 5",
+      "status": "active",
+      "reason_code": "DEMO_MULE_ACCOUNT_REPORT",
+      "reason": "Смоделированная связь со счётом посредника в цепочке хищения",
+      "scenario": "mule_account",
+      "action": "block_transfer",
+      "source": "synthetic_hackathon_data"
+    }
+  ]
+}
