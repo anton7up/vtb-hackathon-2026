@@ -59,10 +59,26 @@ const closeDialog = () => $('#dialog').close();
 function renderBanner() {
   const hold = protectionOf(state, now());
   const banner = $('#protection-banner');
+  renderSecurityAlerts();
+  if (state.securityLock) {
+    banner.className = 'protection-banner security-locked';
+    banner.innerHTML = `<div class="banner-icon">${icon('lock')}</div><div><b>Операции заблокированы: «Это был не я»</b><p>Все переводы, включая прежних получателей, и снятие наличных остановлены. Баланс и история доступны. Эта блокировка не снимается через 24 часа или ответом сотрудника.</p></div>`;
+    return;
+  }
   banner.className = `protection-banner${hold.active ? ' hold' : ''}`;
   if (hold.active) banner.innerHTML = `<div class="banner-icon">${icon('clock')}</div><div><b>Защитная пауза после изменения данных</b><p>Новым получателям и наличными — после ${esc(date(hold.endsAt))}. Прежним получателям переводить можно.</p></div><div class="countdown"><span id="countdown"></span><small>до окончания паузы</small></div>`;
   else banner.innerHTML = `<div class="banner-icon">${icon('shield')}</div><div><b>${state.lastCriticalChange === null ? 'Счёт под защитой. Ограничений по времени нет' : 'Защитная пауза завершена'}</b><p>${state.lastCriticalChange === null ? 'Проверяем каждого получателя перед отправкой. История и баланс всегда доступны.' : 'Переводы и наличные снова доступны после проверки. Остановленные операции не отправляются автоматически.'}</p></div>`;
   tick();
+}
+function renderSecurityAlerts() {
+  const target = $('#security-alerts');
+  const alerts = state.securityAlerts || [];
+  target.hidden = !state.securityLock && !alerts.length;
+  if (state.securityLock) {
+    target.innerHTML = `<article class="security-alert urgent"><div class="security-alert-heading">${icon('alert')}<h2>${ui.role === 'employee' ? 'Срочная тревога: возможный захват аккаунта' : 'Сообщение принято. Деньги под защитой'}</h2></div><p>Клиент не признал событие: <b>${esc(state.securityLock.eventText)}</b>. ${date(state.securityLock.at)} МСК.</p><p>${ui.role === 'employee' ? 'Создано срочное обращение в разделе «Операции». Проверьте события и свяжитесь с клиентом по ранее проверенному каналу. Ответ на обращение не разблокирует счёт.' : 'Другие сессии завершены. В банк отправлено срочное обращение — ответ появится в истории. Свяжитесь с банком по проверенному каналу; не используйте номер из подозрительного сообщения.'}</p></article>`;
+    return;
+  }
+  target.innerHTML = alerts.slice(0, 3).map(a => `<article class="security-alert"><div class="security-alert-heading">${icon('alert')}<h2>${esc(a.text)}</h2></div><p>${date(a.at)} МСК. Если вы не совершали это действие, сообщите банку.</p><p class="old-session-note">Это предупреждение отображается только в старых сессиях — открытых до события. В сессии, где выполнено действие, кнопки нет.</p><button type="button" class="button danger" data-report-security="${esc(a.id)}">Это был не я</button></article>`).join('');
 }
 function tick() {
   const remaining = protectionOf(state, now()).remainingMs;
@@ -96,6 +112,8 @@ function render() {
   renderBanner();
   const views = { transfer: transferView, security: securityView, history: historyView, cases: employeeView, registry: registryView, events: eventsView };
   $('#workspace').innerHTML = views[ui.page]();
+  if (state.securityLock && $('.balance-bottom span')) $('.balance-bottom span').textContent = 'Демо-баланс · списания заблокированы';
+  if (ui.page === 'security' && !state.securityLock) $('#workspace').insertAdjacentHTML('afterbegin', '<p class="notice">Предупреждение «Это был не я» отображается только в старых сессиях — открытых до нового входа или изменения данных. В сессии, совершившей действие, кнопки нет.</p>');
   updateRecipientInfo();
 }
 function balanceCard() { return `<div class="panel balance-card"><div class="balance-top"><span>Мастер-счёт · RUB</span><span class="mini-shield">${icon('shield')} Защищён</span></div><strong id="balance">${money(state.balance)}</strong><div class="balance-bottom"><span>Доступный демо-баланс</span><b>•• 4812</b></div></div>`; }
@@ -103,7 +121,7 @@ function policyView() {
   const active = protectionOf(state, now()).active;
   return `<div class="aside-grid"><div class="panel"><div class="policy-title"><h2>Что доступно сейчас</h2>${icon('shield')}</div>${[
     ['user', 'Прежние получатели', 'После проверки по реестру', true], ['transfer', 'Новые получатели', active ? 'Пауза на 24 часа' : 'После проверки по реестру', !active], ['cash', 'Снятие наличных', active ? 'До окончания паузы' : 'После подтверждения', !active], ['history', 'Баланс и история', 'Без ограничений', true]
-  ].map(([symbol, title, text, allowed]) => `<div class="policy-item"><span class="policy-icon">${icon(symbol)}</span><div><b>${title}</b><p>${text}</p></div><span class="availability ${allowed ? '' : 'closed'}">${allowed ? 'Доступно' : 'Пауза'}</span></div>`).join('')}<p class="aside-note">Старый получатель — тот, кому вы успешно переводили до изменения данных. Совпадение в реестре останавливает любой перевод.</p></div><div class="panel support-card"><h3>${icon('message')} Банк рядом</h3><p>Откройте остановленную операцию и создайте обращение. Ответ сотрудника появится в истории.</p><button class="link-button" data-page="history">История и обращения →</button></div></div>`;
+  ].map(([symbol, title, text, allowed]) => { const locked = state.securityLock && symbol !== 'history'; return `<div class="policy-item"><span class="policy-icon">${icon(symbol)}</span><div><b>${title}</b><p>${locked ? 'Сообщение «Это был не я»' : text}</p></div><span class="availability ${locked || !allowed ? 'closed' : ''}">${locked ? 'Блокировка' : allowed ? 'Доступно' : 'Пауза'}</span></div>`; }).join('')}<p class="aside-note">Старый получатель — тот, кому вы успешно переводили до изменения данных. Совпадение в реестре останавливает любой перевод.</p></div><div class="panel support-card"><h3>${icon('message')} Банк рядом</h3><p>Откройте остановленную операцию и создайте обращение. Ответ сотрудника появится в истории.</p><button class="link-button" data-page="history">История и обращения →</button></div></div>`;
 }
 function transferView() {
   const options = allRecipients().map(r => `<option value="${esc(r.id)}" ${ui.recipient === r.id ? 'selected' : ''}>${esc(r.name)} · ${isKnown(state, r.id, now()) ? 'прежний' : 'новый'}</option>`).join('');
@@ -124,12 +142,13 @@ function operationsTable(ops, employee = false, title = 'Операции') {
   return `<section class="panel history"><div class="section-head"><h2>${esc(title)}</h2><small>${ops.length} записей</small></div><div class="table-wrap"><table class="${employee ? 'employee-table' : 'client-table'}"><thead><tr><th>Получатель / операция</th><th class="money">Сумма</th>${employee ? '<th>Основание</th>' : ''}<th>Статус</th><th></th></tr></thead><tbody>${ops.length ? ops.map(op => `<tr><td><div class="recipient-cell"><span class="recipient-avatar">${icon(op.kind === 'cash' ? 'cash' : 'user')}</span><div>${esc(op.recipientName)}<small>${esc(date(op.createdAt))}${op.seeded ? ' · демо-история' : ''}</small></div></div></td><td class="money">${money(op.amount)}</td>${employee ? `<td class="reason-column">${esc(op.reason)}<small>${esc(op.code)} · ${op.kind === 'cash' ? 'Наличные' : op.knownAtDecision ? 'Прежний получатель' : 'Новый получатель'}</small></td>` : ''}<td>${statusPill(op)}</td><td><button type="button" class="link-button" data-operation="${esc(op.id)}" aria-label="Подробнее об операции ${esc(op.id)}">Подробнее</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">Новых операций пока нет. Создайте перевод в кабинете клиента.</td></tr>'}</tbody></table></div></section>`;
 }
 function securityView() {
+  if (state.securityLock) return `<section class="panel"><h2>Доступ защищён после вашего сообщения</h2><p>Смена номера и восстановление доступа временно недоступны. Все переводы и наличные заблокированы. Сотрудник получил срочное обращение.</p><button type="button" class="button secondary" data-page="history">Открыть обращение</button><p>Предупреждение «Это был не я» отображается только в старых сессиях, открытых до события, и не показывается в сессии, совершившей действие.</p>${eventList(state.events.slice(0, 6))}</section>`;
   return `<div class="security-layout"><section class="panel"><h2>Данные доступа</h2><p class="panel-subtitle">Изменение запускает защитную паузу на 24 часа.</p><div class="setting-row"><span class="policy-icon">${icon('phone')}</span><div><b>Номер телефона</b><p id="current-phone">${esc(state.phone)}</p></div><button type="button" class="button secondary small" data-change-phone>Изменить</button></div><div class="setting-row"><span class="policy-icon">${icon('lock')}</span><div><b>Восстановление доступа</b><p>Смена способа подтверждения</p></div><button type="button" class="button secondary small" id="restore-access">Восстановить</button></div><div class="security-illustration">${icon('shield')}<p>После изменения данных прежние получатели остаются доступны. Новые переводы и наличные — через 24 часа.</p></div><p class="aside-note">При повторном изменении 24 часа отсчитываются заново. Истечение времени не отправляет ранее остановленные операции.</p></section><section class="panel"><h2>Последние события</h2>${eventList(state.events.filter(e => ['phone', 'recovery', 'time'].includes(e.type)).slice(0, 6))}</section></div>`;
 }
 function ticketView(employee = false) {
   return `<section class="panel"><div class="section-head"><h2>${employee ? 'Обращения клиента' : 'Ваши обращения'}</h2><small>${state.tickets.filter(t => t.status === 'open').length} открыто</small></div>${state.tickets.length ? state.tickets.map(t => {
     const op = state.operations.find(o => o.id === t.operationId);
-    return `<article class="ticket"><div class="ticket-top"><b>${esc(t.id)}</b><span class="pill ${t.status === 'open' ? 'amber' : 'green'}">${t.status === 'open' ? 'Ожидает ответа' : 'Есть ответ'}</span></div><p>${esc(op?.recipientName)} · ${money(op?.amount ?? 0)}<br>${esc(op?.reason)}</p>${t.reply ? `<p class="reply">${esc(t.reply)}</p><small class="muted">Сотрудник · ${date(t.answeredAt)}</small>` : employee ? `<form data-ticket="${esc(t.id)}"><label class="field-label" for="reply-${esc(t.id)}">Ответ клиенту</label><textarea id="reply-${esc(t.id)}" maxlength="1000" required placeholder="Объясните причину ограничения и дальнейшие действия">${esc(ui.answers[t.id] || '')}</textarea><button class="button small" type="submit">Отправить ответ</button></form>` : '<small class="muted">Ответ появится здесь после обработки сотрудником.</small>'}</article>`;
+    return `<article class="ticket ${t.kind === 'security' ? 'security-ticket' : ''}"><div class="ticket-top"><b>${esc(t.id)}</b>${t.kind === 'security' ? '<span class="pill red">Срочно · захват аккаунта</span>' : ''}<span class="pill ${t.status === 'open' ? 'amber' : 'green'}">${t.status === 'open' ? 'Ожидает ответа' : 'Есть ответ'}</span></div>${t.kind === 'security' ? `<p><b>Клиент сообщил «Это был не я»</b><br>${esc(t.eventText)} · ${date(t.eventAt)} МСК.<br>Все переводы и наличные заблокированы. Другие сессии завершены. Ответ не снимает блокировку.</p>` : `<p>${esc(op?.recipientName)} · ${money(op?.amount ?? 0)}<br>${esc(op?.reason)}</p>`}${t.reply ? `<p class="reply">${esc(t.reply)}</p><small class="muted">Сотрудник · ${date(t.answeredAt)}</small>` : employee ? `<form data-ticket="${esc(t.id)}"><label class="field-label" for="reply-${esc(t.id)}">Ответ клиенту</label><textarea id="reply-${esc(t.id)}" maxlength="1000" required placeholder="Объясните причину ограничения и дальнейшие действия">${esc(ui.answers[t.id] || '')}</textarea><button class="button small" type="submit">Отправить ответ</button></form>` : '<small class="muted">Ответ появится здесь после обработки сотрудником.</small>'}</article>`;
   }).join('') : '<p class="empty">Откройте остановленную операцию и нажмите «Обратиться в банк».</p>'}</section>`;
 }
 function historyView() { return `<div class="stack">${operationsTable(state.operations, false, 'История операций')}${ticketView()}</div>`; }
@@ -168,12 +187,22 @@ document.addEventListener('click', async e => {
   try {
     if (b.hasAttribute('data-close')) { closeDialog(); return; }
     if (b.id === 'logout') { await api('/api/auth/logout', {}); location.replace('/login'); return; }
+    if (b.dataset.reportSecurity) {
+      const alert = state.securityAlerts?.find(a => a.id === b.dataset.reportSecurity);
+      if (!alert) return;
+      showDialog('Это действие совершили не вы?', `<p>${esc(alert.text)} · ${date(alert.at)} МСК.</p><p>Будут заблокированы все переводы и снятие наличных, включая прежних получателей. Другие сессии завершатся. Сотрудник банка получит срочную тревогу.</p><p>Блокировка не снимается через 24 часа. Кнопка доступна только в старой сессии, открытой до события.</p><div class="dialog-actions"><button type="button" class="button subtle" data-close>Отмена</button><button type="button" class="button danger" data-confirm-security="${esc(alert.id)}">Заблокировать операции</button></div>`, 'alert', 'red');
+    }
+    if (b.dataset.confirmSecurity) {
+      b.disabled = true;
+      try { await action('report-security', { alertId: b.dataset.confirmSecurity }); closeDialog(); pendingRequest = null; toast('Операции заблокированы. Сотруднику отправлена срочная тревога.'); }
+      finally { b.disabled = false; }
+    }
     if (b.dataset.page) { ui.page = b.dataset.page; render(); }
     if (b.dataset.kind) { ui.kind = b.dataset.kind; render(); }
     if (b.id === 'demo-change' || b.hasAttribute('data-change-phone')) phoneDialog();
     if (b.id === 'demo-forward') {
       await action('advance');
-      toast('Прошло 24 часа. Новые операции снова проходят обычную проверку.');
+      toast(state.securityLock ? 'Прошло 24 часа. Блокировка «Это был не я» продолжает действовать.' : 'Прошло 24 часа. Новые операции снова проходят обычную проверку.');
     }
     if (b.id === 'demo-reset') showDialog('Начать демонстрацию заново?', '<p>Сбросится только это демо: баланс, операции, обращения, добавленные записи реестра и таймер. Базовые пять записей останутся.</p><div class="dialog-actions"><button type="button" class="button subtle" data-close>Отмена</button><button type="button" class="button" id="confirm-reset">Начать заново</button></div>', 'history');
     if (b.id === 'confirm-reset') { await action('reset'); ui.recipient = 'DEMO-FAMILY-001'; ui.amount = '3 000'; ui.kind = 'transfer'; ui.answers = {}; pendingRequest = null; closeDialog(); toast('Демонстрация начата заново'); }

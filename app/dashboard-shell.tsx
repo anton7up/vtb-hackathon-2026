@@ -14,6 +14,7 @@ export default function DashboardShell({ user }: { user: { role: string; name: s
         {employee && <section className="demo-tools" aria-label="Управление демонстрацией"><span className="tools-label">Демонстрация</span><button type="button" id="demo-forward">Перемотать 24 часа</button><button type="button" id="demo-reset" className="text-button">Начать заново</button><span id="demo-clock"></span></section>}
         <div id="connection-notice" className="notice warning" hidden>Не удалось обновить данные. Проверьте соединение.</div>
         <section className="protection-banner" id="protection-banner" aria-label="Статус защитной паузы"></section>
+        <section id="security-alerts" aria-label="Предупреждения безопасности" aria-live="polite" hidden></section>
         <div id="workspace"><p className="empty">Загружаем данные аккаунта…</p></div>
         <footer>Учебный прототип. Деньги, получатели и реестр вымышлены. 24 часа — правило демо.<span>Вы вошли как {employee ? 'сотрудник банка' : 'клиент'}. Доступ к данным проверяется сервером.</span></footer>
       </main>

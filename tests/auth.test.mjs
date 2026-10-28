@@ -112,3 +112,94 @@ test('known recipient remains available during hold, duplicate confirmation debi
   assert.equal(first.body.operation.status, 'completed'); assert.equal(second.body.duplicate, true);
   assert.equal(second.body.state.balance, 24530000);
 });
+
+test('new login alerts only older client sessions, never itself or staff', async () => {
+  const f = fixture(), old = await f.login('client'), newer = await f.login('client'), staff = await f.login('employee');
+  const a = (await f.call('/api/state', undefined, old.cookie)).body.state;
+  const b = (await f.call('/api/state', undefined, newer.cookie)).body.state;
+  const c = (await f.call('/api/state', undefined, staff.cookie)).body.state;
+  assert.equal(a.securityAlerts.length, 1); assert.equal(a.securityAlerts[0].kind, 'login');
+  assert.deepEqual(b.securityAlerts, []); assert.equal('securityAlerts' in c, false);
+  const me = await f.call('/api/auth/me', undefined, old.cookie);
+  assert.equal(me.body.user.clientId, 'client-demo');
+  assert.equal('sessionHash' in me.body.user, false); assert.equal('sessionStartedAt' in me.body.user, false);
+  for (const row of f.sql.prepare('SELECT token_hash FROM sessions').all()) {
+    assert.equal(JSON.stringify([a, b, c, me.body]).includes(row.token_hash), false);
+  }
+});
+
+test('phone alert excludes its originating session and sessions opened after the event', async () => {
+  const f = fixture(), old = await f.login('client'), origin = await f.login('client');
+  await f.call('/api/action', { action: 'phone', phone: '+7 000 000-00-02' }, origin.cookie);
+  const oldState = (await f.call('/api/state', undefined, old.cookie)).body.state;
+  const alert = oldState.securityAlerts.find(a => a.kind === 'phone'); assert.ok(alert);
+  const originState = (await f.call('/api/state', undefined, origin.cookie)).body.state;
+  assert.equal(originState.securityAlerts.some(a => a.id === alert.id), false);
+  assert.equal((await f.call('/api/action', { action: 'report-security', alertId: alert.id, sessionStartedAt: 0 }, origin.cookie)).status, 403);
+  const after = await f.login('client');
+  assert.equal((await f.call('/api/state', undefined, after.cookie)).body.state.securityAlerts.some(a => a.id === alert.id), false);
+  assert.equal((await f.call('/api/action', { action: 'report-security', alertId: alert.id }, after.cookie)).status, 403);
+  assert.equal((await f.call('/api/action', { action: 'report-security', alertId: 'made-up' }, old.cookie)).status, 403);
+});
+
+test('recovery alert available only in the other pre-existing session', async () => {
+  const f = fixture(), old = await f.login('client'), origin = await f.login('client');
+  await f.call('/api/action', { action: 'recovery' }, origin.cookie);
+  const a = (await f.call('/api/state', undefined, old.cookie)).body.state;
+  const b = (await f.call('/api/state', undefined, origin.cookie)).body.state;
+  assert.equal(a.securityAlerts.some(x => x.kind === 'recovery'), true);
+  assert.equal(b.securityAlerts.some(x => x.kind === 'recovery'), false);
+});
+
+test('report persists full lock and urgent staff ticket, revokes other client sessions but not staff', async () => {
+  const f = fixture(), old = await f.login('client'), source = await f.login('client'), staff = await f.login('employee');
+  const view = (await f.call('/api/state', undefined, old.cookie)).body.state;
+  const alert = view.securityAlerts[0];
+  const result = await f.call('/api/action', { action: 'report-security', alertId: alert.id }, old.cookie);
+  assert.equal(result.status, 200); assert.equal(result.body.state.securityLock.alertId, alert.id);
+  assert.deepEqual(result.body.state.securityAlerts, []);
+  assert.equal(result.body.state.balance, 24830000);
+  assert.equal((await f.call('/api/state', undefined, source.cookie)).status, 401);
+  const employee = await f.call('/api/state', undefined, staff.cookie);
+  assert.equal(employee.status, 200); assert.ok(employee.body.state.securityLock);
+  assert.equal(employee.body.state.tickets[0].priority, 'urgent');
+  assert.equal(employee.body.state.tickets[0].kind, 'security');
+  assert.equal(employee.body.state.events.some(e => e.type === 'security-report'), true);
+  const duplicate = await f.call('/api/action', { action: 'report-security', alertId: alert.id }, old.cookie);
+  assert.equal(duplicate.body.duplicate, true); assert.equal(duplicate.body.state.tickets.length, 1);
+  assert.equal((await f.call('/api/action', { action: 'report-security', alertId: alert.id }, staff.cookie)).status, 403);
+});
+
+test('lock stops old/new recipients and cash, including already prepared confirmations; time and reply do not lift it', async () => {
+  const f = fixture(), old = await f.login('client'), source = await f.login('client'), staff = await f.login('employee');
+  const request = { kind: 'transfer', recipientId: 'DEMO-FAMILY-001', amount: 300000 };
+  assert.equal((await f.call('/api/action', { action: 'attempt', ...request }, old.cookie)).body.decision.allowed, true);
+  const state = (await f.call('/api/state', undefined, old.cookie)).body.state;
+  const reported = await f.call('/api/action', { action: 'report-security', alertId: state.securityAlerts[0].id }, old.cookie);
+  for (const data of [request, { ...request, recipientId: 'DEMO-NEW-001' }, { kind: 'cash', amount: 100000 }]) {
+    const res = await f.call('/api/action', { action: 'confirm', ...data, requestId: crypto.randomUUID() }, old.cookie);
+    assert.equal(res.body.decision.code, 'ACCOUNT_SECURITY_LOCK'); assert.equal(res.body.operation.status, 'blocked');
+    assert.equal(res.body.state.balance, 24830000);
+  }
+  await f.call('/api/action', { action: 'reply', ticketId: reported.body.state.tickets[0].id, reply: 'Проверяем обращение.' }, staff.cookie);
+  await f.call('/api/action', { action: 'advance' }, staff.cookie);
+  const blocked = await f.call('/api/action', { action: 'attempt', ...request }, old.cookie);
+  assert.equal(blocked.body.decision.code, 'ACCOUNT_SECURITY_LOCK');
+  assert.equal((await f.call('/api/action', { action: 'recovery' }, old.cookie)).status, 423);
+  assert.equal((await f.call('/api/action', { action: 'phone', phone: '+7 000 000-00-02' }, old.cookie)).status, 423);
+  const fresh = await f.login('client');
+  const freshView = await f.call('/api/state', undefined, fresh.cookie);
+  assert.ok(freshView.body.state.securityLock); assert.deepEqual(freshView.body.state.securityAlerts, []);
+  assert.equal((await f.call('/api/action', { action: 'report-security', alertId: state.securityAlerts[0].id }, fresh.cookie)).status, 403);
+});
+
+test('existing pre-update bank state without security fields remains compatible', async () => {
+  const f = fixture(), client = await f.login('client');
+  const row = f.sql.prepare('SELECT data FROM bank_state').get(), state = JSON.parse(row.data);
+  delete state.securityAlerts; delete state.securityLock;
+  f.sql.prepare('UPDATE bank_state SET data = ?').run(JSON.stringify(state));
+  const res = await f.call('/api/state', undefined, client.cookie);
+  assert.equal(res.status, 200); assert.deepEqual(res.body.state.securityAlerts, []);
+  await f.call('/api/action', { action: 'recovery' }, client.cookie);
+  assert.equal((await f.call('/api/state', undefined, client.cookie)).status, 200);
+});
