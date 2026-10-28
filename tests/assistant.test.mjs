@@ -12,6 +12,25 @@ test('intermediate question is always review and conversation ends after four an
   assert.equal(validateAssessment(raw, ['Друг'], 1).class, 'review');
   assert.equal(validateAssessment(raw, ['Друг'], 4).next_question, null);
 });
+
+test('review drops a misquoted verb and keeps its clarification without inventing evidence', () => {
+  const raw = { class: 'review', scenario: 'unknown', explanation: 'Нужно уточнить получателя.', evidence: ['переводу за шаурму', 'шаурму'], next_question: 'Кому принадлежит счёт?' };
+  const result = validateAssessment(raw, ['Привет, перевожу за шаурму'], 1);
+  assert.equal(result.class, 'review');
+  assert.equal(result.next_question, raw.next_question);
+  assert.deepEqual(result.evidence, ['шаурму']);
+  assert.deepEqual(validateAssessment({ ...raw, evidence: ['неточная цитата'] }, ['Привет, перевожу за шаурму'], 1).evidence, []);
+});
+
+test('misquotes still reject block and normal, including a block with some valid evidence', () => {
+  const raw = { scenario: 'safe_account', explanation: 'Есть риск.', evidence: ['безопасный счёт', 'выдуманная цитата'], next_question: null };
+  for (const cls of ['block', 'normal']) assert.throws(() => validateAssessment({ ...raw, class: cls }, ['Просят безопасный счёт'], 1));
+});
+
+test('review still rejects malformed evidence instead of relaxing the response schema', () => {
+  const raw = { class: 'review', scenario: 'unknown', explanation: 'Нужно уточнить.', next_question: 'Кто просит?' };
+  for (const evidence of [[123], [''], ['x'.repeat(201)], 'цитата', ['a', 'b', 'c', 'd']]) assert.throws(() => validateAssessment({ ...raw, evidence }, ['Тест'], 1));
+});
 test('adapter sends only model context and dialogue, not its secret or arbitrary runtime fields', async () => {
   let packet;
   const c = { context: null, privatePhone: '+7 900 1234567', turns: [{ message: redact('Код 987654, карта 4111111111111111'), status: 'processing' }] };
