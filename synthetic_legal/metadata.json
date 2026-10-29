@@ -1,0 +1,44 @@
+{
+  "rows": 40252,
+  "period": "2025-01-01 03:11:07 — 2025-04-30 23:33:37",
+  "clients": {
+    "OOO": 180,
+    "IP": 120
+  },
+  "rows_by_client_type": {
+    "OOO": 33254,
+    "IP": 6998
+  },
+  "fraud_rows": 403,
+  "fraud_rate": 0.01,
+  "fraud_kinds_rows": {
+    "drain": 104,
+    "bec": 96,
+    "dbo_takeover": 90,
+    "ip_social": 61,
+    "ceo_fraud": 52
+  },
+  "fraud_by_month": {
+    "2025-01": 87,
+    "2025-02": 105,
+    "2025-03": 88,
+    "2025-04": 123
+  },
+  "purpose_share": {
+    "goods": 0.4111,
+    "salary": 0.2574,
+    "services": 0.2409,
+    "other": 0.0354,
+    "tax": 0.0238,
+    "rent": 0.0202,
+    "loan": 0.0067,
+    "refund": 0.0046
+  },
+  "receiver_type_share": {
+    "UL": 0.5146,
+    "FL": 0.2876,
+    "IP": 0.1978
+  },
+  "seed": 42,
+  "note": "Синтетика. Пороги продакшна на ней не настраивать."
+}
