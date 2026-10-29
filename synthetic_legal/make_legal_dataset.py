@@ -353,6 +353,23 @@ def gen_legit(rng, clients: list[dict], world: dict) -> list[dict]:
                     frac = rng.uniform(0.8, 0.95) if rng.random() < 0.06 else rng.uniform(0.1, 0.5)
                     emit(c, t, c["inn"], c["own_card"], "FL", "other", frac=frac)
 
+            # --- прочие платежи ООО (назначение other): подотчёт сотруднику на
+            #     хозрасходы и командировки, госпошлины, штрафы, членские взносы.
+            #     Без них «ООО + other» было бы стопроцентным признаком фрода.
+            if ooo:
+                for _ in range(int(rng.poisson(1.5))):
+                    day = month_work[int(rng.integers(len(month_work)))]
+                    t = at(day, rng, HOUR_OOO)
+                    if c["employees"] and rng.random() < 0.5:
+                        e = c["employees"][int(rng.integers(len(c["employees"])))]
+                        emit(c, t, e["inn"], e["account"], "FL", "other",
+                             amount=rng.lognormal(np.log(15_000), 0.7), round_p=0.7)
+                    else:
+                        cp = world["pool"][int(rng.integers(len(world["pool"])))] \
+                            if rng.random() < 0.6 else world["tax"]
+                        emit(c, t, cp["inn"], account_at(cp, t), cp["type"], "other",
+                             amount=rng.lognormal(np.log(8_000), 1.0), round_p=0.5)
+
             # --- самозанятые: физлица-исполнители, иногда новый человек
             for _ in range(int(rng.poisson(1.0)) if c["freelancers"] else 0):
                 day = month_work[int(rng.integers(len(month_work)))]
@@ -453,10 +470,10 @@ def gen_fraud(rng, ids: Ids, clients: list[dict], target_rows: int) -> tuple[lis
             # «директор» в мессенджере: срочно оплатить новому контрагенту
             m = mule(("UL", "FL") if rng.random() < 0.4 else ("UL",))
             t = at(WORKDAYS[int(rng.integers(len(WORKDAYS)))], rng, hour=int(rng.integers(10, 18)))
-            purpose = str(rng.choice(["other", "loan", "services"], p=[0.5, 0.3, 0.2]))
+            purpose = str(rng.choice(["other", "loan", "services", "goods"], p=[0.35, 0.2, 0.25, 0.2]))
             for _ in range(1 if rng.random() < 0.8 else 2):
                 emit(c, kind, t, m["inn"], m["account"], m["type"], purpose, own_dev(t),
-                     c["channel"], frac=rng.uniform(0.2, 0.6))
+                     c["channel"], frac=rng.uniform(0.1, 0.6))
                 t = t + pd.Timedelta(hours=float(rng.uniform(0.5, 5)))
 
         elif kind == "dbo_takeover":
@@ -468,8 +485,14 @@ def gen_fraud(rng, ids: Ids, clients: list[dict], target_rows: int) -> tuple[lis
                 day = WORKDAYS[int(rng.integers(len(WORKDAYS)))]
                 hour = int(rng.integers(9, 19))
             t = at(day, rng, hour=hour)
-            c["access_changes"].append(t - pd.Timedelta(hours=float(rng.uniform(0.3, 48))))
-            dev = ids.device(attacker=True)
+            if rng.random() < 0.7:
+                # классика: перехватили SMS/сменили телефон и вошли с нового устройства
+                c["access_changes"].append(t - pd.Timedelta(hours=float(rng.uniform(0.3, 48))))
+                dev = ids.device(attacker=True)
+            else:
+                # удалённый доступ (AnyDesk) к компьютеру бухгалтера: доступ не меняли,
+                # устройство — родное. Самый незаметный вариант
+                dev = own_dev(t)
             for j in range(int(rng.integers(1, 4))):
                 m = mule(("FL", "IP") if rng.random() < 0.6 else ("UL",))
                 emit(c, kind, t, m["inn"], m["account"], m["type"],
@@ -487,6 +510,8 @@ def gen_fraud(rng, ids: Ids, clients: list[dict], target_rows: int) -> tuple[lis
             else:
                 dev = own_dev(t)        # вредонос или удалённый доступ на компьютере бухгалтера
             k = int(rng.integers(3, 9))
+            # 30% выводят не за час, а растягивают на полдня — чтобы не бросаться в глаза
+            gap = (2, 20) if rng.random() < 0.7 else (30, 150)
             for j in range(k):
                 m = mule(("FL",) if rng.random() < 0.8 else ("UL", "IP"))
                 frac = 1 / (k - j) * rng.uniform(0.85, 1.0)
@@ -496,7 +521,7 @@ def gen_fraud(rng, ids: Ids, clients: list[dict], target_rows: int) -> tuple[lis
                      dev, c["channel"] if c["channel"] != "1c" else "web", frac=frac)
                 if amount_round:
                     events[-1]["round"] = True
-                t = t + pd.Timedelta(minutes=float(rng.uniform(2, 20)))
+                t = t + pd.Timedelta(minutes=float(rng.uniform(*gap)))
 
         else:  # ip_social — владельцу ИП звонит «служба безопасности банка»
             m = mule(("FL",))
@@ -504,10 +529,13 @@ def gen_fraud(rng, ids: Ids, clients: list[dict], target_rows: int) -> tuple[lis
             t = at(day, rng, hour=int(rng.integers(9, 22)))
             if rng.random() < 0.25:
                 c["access_changes"].append(t - pd.Timedelta(hours=float(rng.uniform(0.2, 24))))
+            # 35% жертв переводят не всё, а часть — «для проверки» или «первый транш»
+            lo, hi = (0.15, 0.45) if rng.random() < 0.35 else (0.5, 1.0)
             for j in range(int(rng.integers(1, 4))):
-                emit(c, kind, t, m["inn"], m["account"], "FL", "other", own_dev(t),
+                emit(c, kind, t, m["inn"], m["account"], "FL",
+                     "other" if rng.random() < 0.7 else "services", own_dev(t),
                      "mobile" if rng.random() < 0.7 else c["channel"],
-                     frac=rng.uniform(0.5, 1.0) if j == 0 else rng.uniform(0.6, 1.0))
+                     frac=rng.uniform(lo, hi))
                 t = t + pd.Timedelta(minutes=float(rng.uniform(5, 120)))
 
         made[kind] += len(events) - rows_before
