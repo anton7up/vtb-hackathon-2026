@@ -1,0 +1,32 @@
+{
+  "thresholds": {
+    "t_review": 0.14,
+    "t_block": 0.46
+  },
+  "cost_inputs": {
+    "review": 50,
+    "false_block": 500,
+    "catch_rate": 0.9
+  },
+  "chosen_on": "кросс-валидация по обучающему периоду",
+  "metrics_at_thresholds": {
+    "passed": 3071,
+    "reviewed": 6,
+    "blocked": 26,
+    "fraud_total": 36,
+    "blocked_true": 26,
+    "blocked_false": 0,
+    "reviewed_fraud": 5,
+    "missed_fraud": 5,
+    "precision_block": 1.0,
+    "recall_block": 0.722,
+    "alerts": 32,
+    "fraud_amount": 203053.28,
+    "blocked_amount": 176684.4,
+    "reviewed_amount": 18331.22,
+    "missed_amount": 8037.66,
+    "cost": 10170.78
+  },
+  "source": "C:\\Users\\pavel\\OneDrive\\Документы\\Проект по умолчанию\\synthetic\\bank_transfers.csv",
+  "seed": 42
+}

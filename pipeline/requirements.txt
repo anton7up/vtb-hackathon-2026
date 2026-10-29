@@ -1,0 +1,14 @@
+# Точные версии, на которых обучены артефакты в artifacts/.
+# Проверено на Python 3.14.4 (Windows).
+#
+# Установка:
+#   py -m pip install -r pipeline/requirements.txt
+#
+# Зачем фиксировать версии: .joblib хранит ссылки на классы scikit-learn.
+# На другой версии возможны InconsistentVersionWarning и расхождение
+# в предсказаниях, поэтому версии — часть контракта модели, а не мелочь.
+
+joblib==1.6.0
+numpy==2.5.3
+pandas==3.0.6
+scikit-learn==1.9.1
