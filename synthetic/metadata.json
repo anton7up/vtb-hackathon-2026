@@ -1,0 +1,26 @@
+{
+  "rows": 9038,
+  "period": "2025-01-01 00:34:23 — 2025-03-31 23:23:21",
+  "fraud_rows": 90,
+  "fraud_rate": 0.01,
+  "label_share": {
+    "0": 0.9409,
+    "1": 0.0475,
+    "2": 0.0116
+  },
+  "customers": 605,
+  "recipients": 639,
+  "fraud_kinds": {
+    "takeover": 33,
+    "collusion": 19,
+    "structuring": 19,
+    "probe": 12,
+    "mule": 7
+  },
+  "fraud_in_label0": 7,
+  "fraud_in_label1": 12,
+  "fraud_in_label2": 71,
+  "legit_in_label2": 34,
+  "legit_in_label1": 417,
+  "note": "Синтетика. Пороги продакшна на ней не настраивать."
+}
