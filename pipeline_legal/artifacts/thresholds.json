@@ -1,0 +1,34 @@
+{
+  "thresholds": {
+    "t_review": 0.0075,
+    "t_block": 0.32
+  },
+  "cost_inputs": {
+    "review": 300,
+    "false_block": 5000,
+    "catch_rate": 0.9
+  },
+  "chosen_on": "кросс-валидация по обучающему периоду",
+  "metrics_at_thresholds": {
+    "passed": 10213,
+    "reviewed": 156,
+    "blocked": 107,
+    "fraud_total": 114,
+    "blocked_true": 100,
+    "blocked_false": 7,
+    "reviewed_fraud": 13,
+    "reviewed_legit": 143,
+    "missed_fraud": 1,
+    "precision_block": 0.935,
+    "recall_block": 0.877,
+    "recall_stopped": 0.991,
+    "alerts": 263,
+    "fraud_amount": 69454161.94,
+    "blocked_amount": 63958713.93,
+    "reviewed_amount": 5443909.03,
+    "missed_amount": 51538.98,
+    "cost": 677729.88
+  },
+  "source": "synthetic_legal/legal_transfers.csv",
+  "seed": 42
+}

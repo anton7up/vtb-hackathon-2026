@@ -1,0 +1,71 @@
+{
+  "test": {
+    "pr_auc": 0.9636,
+    "roc_auc": 0.9987,
+    "brier": 0.003,
+    "base_rate": 0.0109
+  },
+  "cv_train": {
+    "pr_auc": 0.8586,
+    "roc_auc": 0.9961,
+    "brier": 0.0037,
+    "base_rate": 0.0096
+  },
+  "decisions": {
+    "passed": 10213,
+    "reviewed": 156,
+    "blocked": 107,
+    "fraud_total": 114,
+    "blocked_true": 100,
+    "blocked_false": 7,
+    "reviewed_fraud": 13,
+    "reviewed_legit": 143,
+    "missed_fraud": 1,
+    "precision_block": 0.935,
+    "recall_block": 0.877,
+    "recall_stopped": 0.991,
+    "alerts": 263,
+    "fraud_amount": 69454161.94,
+    "blocked_amount": 63958713.93,
+    "reviewed_amount": 5443909.03,
+    "missed_amount": 51538.98,
+    "cost": 677729.88
+  },
+  "by_fraud_kind": {
+    "ip_social": {
+      "blocked": 14,
+      "reviewed": 1,
+      "missed": 1,
+      "total": 16,
+      "stopped_share": 0.94
+    },
+    "bec": {
+      "blocked": 25,
+      "reviewed": 5,
+      "missed": 0,
+      "total": 30,
+      "stopped_share": 1.0
+    },
+    "dbo_takeover": {
+      "blocked": 17,
+      "reviewed": 1,
+      "missed": 0,
+      "total": 18,
+      "stopped_share": 1.0
+    },
+    "ceo_fraud": {
+      "blocked": 11,
+      "reviewed": 4,
+      "missed": 0,
+      "total": 15,
+      "stopped_share": 1.0
+    },
+    "drain": {
+      "blocked": 33,
+      "reviewed": 2,
+      "missed": 0,
+      "total": 35,
+      "stopped_share": 1.0
+    }
+  }
+}
