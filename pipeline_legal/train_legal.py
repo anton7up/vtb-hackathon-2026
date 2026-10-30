@@ -43,16 +43,13 @@ from sklearn.model_selection import StratifiedKFold, cross_val_predict
 HERE = Path(__file__).resolve().parent
 BASE_DIR = HERE.parent
 sys.path.insert(0, str(HERE))
-# Политика 0/1/2 общая с моделью физлиц: одно бизнес-правило на всю систему
 sys.path.insert(0, str(BASE_DIR / "pipeline"))
 
-from features_legal import (FEATURES, FEATURE_DESCRIPTIONS, add_features,  # noqa: E402
+from features_legal import (FEATURES, FEATURE_DESCRIPTIONS, add_features,
                             load_operations)
 from policy import make_decision  # noqa: E402
 
-# ────────────────────────────────────────────────────────────────────────────
 # НАСТРОЙКИ
-# ────────────────────────────────────────────────────────────────────────────
 
 SEED = 42
 DATA_PATH = BASE_DIR / "synthetic_legal" / "legal_transfers.csv"
@@ -71,9 +68,7 @@ COSTS = {
 }
 
 
-# ────────────────────────────────────────────────────────────────────────────
 # СПЛИТ И МОДЕЛЬ
-# ────────────────────────────────────────────────────────────────────────────
 
 def split_by_time(df: pd.DataFrame, test_start: pd.Timestamp):
     train = df[df["timestamp"] < test_start].copy()
@@ -84,7 +79,6 @@ def split_by_time(df: pd.DataFrame, test_start: pd.Timestamp):
 
 
 def build_model() -> CalibratedClassifierCV:
-    # Те же параметры, что у модели физлиц
     base = HistGradientBoostingClassifier(
         max_iter=300,
         learning_rate=0.06,
@@ -101,9 +95,7 @@ def n_days(part: pd.DataFrame) -> int:
     return int((part["timestamp"].max().normalize() - part["timestamp"].min().normalize()).days) + 1
 
 
-# ────────────────────────────────────────────────────────────────────────────
 # МЕТРИКИ И СТОИМОСТЬ
-# ────────────────────────────────────────────────────────────────────────────
 
 def binary_metrics(y_true, proba) -> dict:
     return {
@@ -141,7 +133,6 @@ def decision_report(y_true, amount, decision) -> dict:
         "missed_fraud": int((passed & is_fraud).sum()),
         "precision_block": round(blocked_true / max(blocked_true + blocked_false, 1), 3),
         "recall_block": round(blocked_true / max(int(is_fraud.sum()), 1), 3),
-        # «остановлен» = заблокирован или отправлен на проверку
         "recall_stopped": round(int(((blocked | reviewed) & is_fraud).sum())
                                 / max(int(is_fraud.sum()), 1), 3),
         "alerts": int(reviewed.sum() + blocked.sum()),

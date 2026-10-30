@@ -35,9 +35,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# ────────────────────────────────────────────────────────────────────────────
-# КОНТРАКТ
-# ────────────────────────────────────────────────────────────────────────────
 
 INPUT_COLUMNS = [
     "timestamp", "client_id", "client_type", "client_balance", "amount",
@@ -56,20 +53,17 @@ CHANNEL = {"1c": 0, "web": 1, "mobile": 2}
 PURPOSE = {"goods": 0, "services": 1, "rent": 2, "tax": 3, "salary": 4,
            "loan": 5, "refund": 6, "other": 7}
 
-ACCESS_CAP = 720          # часов; всё, что дальше месяца, — «давно»
+ACCESS_CAP = 720
 
 FEATURES = [
-    # --- время
     "hour",                          # час суток
     "is_weekend",                    # суббота/воскресенье
-    "night",                         # 23:00–05:59
-    # --- сумма
+    "night",
     "amount",                        # сумма платежа
     "client_balance",                # остаток до платежа
     "amount_ratio",                  # какая доля остатка уходит
     "amount_to_avg",                 # сумма / средний прошлый платёж клиента
-    "is_round",                      # кратна 1000
-    # --- получатель
+    "is_round",
     "is_new_receiver",               # клиент этому счёту ещё не платил
     "payee_tx_before",               # сколько раз уже платил этому счёту
     "days_since_first_payee",        # дней с первого платежа этому счёту
@@ -77,17 +71,14 @@ FEATURES = [
     "first_payment_to_individual",   # клиент впервые платит физлицу (кроме зарплаты)
     "receiver_senders_before",       # сколько разных клиентов уже платили этому счёту
     "receiver_age_days",             # дней с первого появления счёта в банке
-    "receiver_blacklisted",          # счёт в базе ЦБ / стоп-листе
-    # --- скорость
+    "receiver_blacklisted",
     "client_tx_last_1h",             # платежей клиента за прошлый час
     "new_receivers_last_24h",        # новых получателей за сутки (с этим платежом)
-    "outflow_share_24h",             # доля остатка, ушедшая за сутки (с этим платежом)
-    # --- сессия
+    "outflow_share_24h",
     "is_new_device",                 # устройство у клиента впервые
     "device_age_days",               # дней с первого платежа с этого устройства
     "access_changed_48h",            # доступ меняли за последние 48 часов
-    "hours_since_access_change",     # часов со смены доступа (до 720)
-    # --- категории
+    "hours_since_access_change",
     "client_type_code",              # 0 ООО / 1 ИП
     "receiver_type_code",            # 0 юрлицо / 1 ИП / 2 физлицо
     "purpose_code",                  # назначение платежа
@@ -124,13 +115,9 @@ FEATURE_DESCRIPTIONS = {
     "channel_code": "0 — 1С, 1 — веб, 2 — мобильный",
 }
 
-# ────────────────────────────────────────────────────────────────────────────
-# ЗАГРУЗКА
-# ────────────────────────────────────────────────────────────────────────────
 
 
 def load_operations(path: str | Path, require_labels: bool = False) -> pd.DataFrame:
-    """Читает CSV, парсит время, ID — строками, сортирует по времени."""
     df = pd.read_csv(path, parse_dates=["timestamp"],
                      dtype={c: str for c in ID_COLUMNS})
     df = df.sort_values("timestamp", kind="stable").reset_index(drop=True)
@@ -141,9 +128,7 @@ def load_operations(path: str | Path, require_labels: bool = False) -> pd.DataFr
     return df
 
 
-# ────────────────────────────────────────────────────────────────────────────
 # ВСПОМОГАТЕЛЬНОЕ: окна «за последний час / сутки»
-# ────────────────────────────────────────────────────────────────────────────
 
 
 def _window_sum_before(times: np.ndarray, values: np.ndarray, window: np.timedelta64) -> np.ndarray:
@@ -174,7 +159,6 @@ def _per_client_window(df: pd.DataFrame, column: str, window: str) -> pd.Series:
 
 
 def add_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Добавляет колонки FEATURES. Строки — по возрастанию времени."""
     missing = [c for c in INPUT_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(f"Нет колонок: {', '.join(missing)}")
@@ -189,7 +173,7 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     for c in ID_COLUMNS:
         df[c] = df[c].astype(str)
     ts = df["timestamp"]
-    days = lambda delta: delta.dt.total_seconds() / 86400  # noqa: E731
+    days = lambda delta: delta.dt.total_seconds() / 86400
 
     # --- время -----------------------------------------------------------------
     df["hour"] = ts.dt.hour
@@ -255,7 +239,6 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
-    """Ровно те колонки и в том порядке, в котором ждёт модель."""
     missing = [f for f in FEATURES if f not in df.columns]
     if missing:
         raise ValueError(f"Нет признаков: {', '.join(missing)}. Сначала вызовите add_features(df).")
