@@ -308,8 +308,10 @@ test('five policy watch fixtures consistently enter additional review and expose
 
 test('recipient catalogue exposes five clearly labelled options for normal, review and block scenarios', async () => {
   const features = Object.fromEntries(TRANSFER_MODEL_FEATURES.map(name => [name, 1]));
+  const modelRequests = [];
   const f = fixture({ TRANSFER_MODEL_URL: 'http://127.0.0.1:8101/v1/classify', transferModelFetch: async (_url, options) => {
-    const amount = JSON.parse(options.body).operation.amount;
+    const payload = JSON.parse(options.body); modelRequests.push(payload);
+    const amount = payload.operation.amount;
     const decision = amount === 500 ? 0 : amount === 3250 ? 1 : amount === 50000 ? 2 : -1;
     return new Response(JSON.stringify({ decision, p_fraud: [0.05, 0.25, 0.75][decision], model_version: 'fraud-hgb-catalogue', thresholds: { review: 0.14, block: 0.46 }, features }), { status: 200 });
   } }), client = await f.login('client');
@@ -322,8 +324,21 @@ test('recipient catalogue exposes five clearly labelled options for normal, revi
       const result = await f.call('/api/action', { action: 'attempt', ...transfer({ recipientId: recipient.id, amount: recipient.suggestedAmount }) }, client.cookie);
       assert.equal(result.body.decision.code, { normal: 'READY', review: 'MODEL_REVIEW', block: 'MODEL_BLOCK' }[group]);
       assert.equal(result.body.classification.source, 'ml'); assert.equal(result.body.state.balance, view.body.state.balance);
+      assert.equal(result.body.classification.input_profile, `fixed-demo-${group}-v1`);
     }
   }
+  const repeatedRecipient = view.body.state.recipients.find(r => r.demoGroup === 'review');
+  const repeated = await f.call('/api/action', { action: 'attempt', ...transfer({ recipientId: repeatedRecipient.id, amount: repeatedRecipient.suggestedAmount }) }, client.cookie);
+  assert.equal(repeated.body.decision.code, 'MODEL_REVIEW');
+  assert.equal(modelRequests.length, 16);
+  for (const payload of modelRequests) {
+    assert.equal(payload.operation.timestamp, '2026-11-01T18:00:00.000Z');
+    assert.equal(payload.operation.sender_balance, 248300); assert.equal(payload.history.length, 6);
+  }
+  const normalRequests = modelRequests.filter(payload => payload.operation.amount === 500);
+  assert.ok(normalRequests.every(payload => payload.history.some(row => row.receiver_id === payload.operation.receiver_id)));
+  assert.ok(modelRequests.filter(payload => payload.operation.amount !== 500).every(payload => payload.history.every(row => row.receiver_id !== payload.operation.receiver_id)));
+  assert.deepEqual(modelRequests.at(-1).history, modelRequests.find(payload => payload.operation.receiver_id === repeatedRecipient.id).history);
 });
 
 test('registry and security lock override the fixed normal fixture class', async () => {
