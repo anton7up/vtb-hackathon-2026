@@ -108,7 +108,7 @@ test('QR payment uses authoritative amount, recipient and transfer kind at attem
   const completed = f.successful(await f.action(f.request('confirm', forged), client));
   assert.equal(completed.operation.kind, 'transfer');
   assert.equal(completed.operation.recipientId, 'DEMO-FAMILY-001');
-  assert.equal(completed.operation.recipientName, 'Мама');
+  assert.equal(completed.operation.recipientName, 'Мама (обычный перевод)');
   assert.equal(completed.operation.amount, 100000);
   assert.equal(completed.operation.status, 'completed');
   assert.equal(completed.state.balance, before.balance - 100000);

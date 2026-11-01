@@ -91,7 +91,7 @@ test('a complaint copies its completed payment and ignores forged recipient, amo
   assert.equal(created.state.balance, before.balance); assert.deepEqual(created.state.operations, before.operations);
   const duplicate = await f.create(client.cookie);
   assert.equal(duplicate.reportId, created.reportId); assert.equal(duplicate.state.fraudReports.length, 1);
-  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM registry').get().n, 8);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM registry').get().n, 10);
 });
 
 test('unknown, blocked and cash operations cannot be reported as completed recipient payments', async () => {
@@ -114,7 +114,7 @@ test('draft complaint is private until the client explicitly submits; manual sub
   assert.equal(sent.state.fraudReports.find(row => row.id === created.reportId).status, 'submitted');
   const employeeReports = await f.reportRows(staff.cookie);
   assert.equal(employeeReports.length, 1); assert.match(JSON.stringify(employeeReports[0]), /велосипед/);
-  assert.equal((await f.registry(staff.cookie)).length, 8);
+  assert.equal((await f.registry(staff.cookie)).length, 10);
   const after = await f.state(client.cookie); assert.equal(after.balance, before.balance); assert.deepEqual(after.operations, before.operations);
 });
 
@@ -135,7 +135,7 @@ test('complaint chat saves a redacted Qwen intake without adding any registry ma
   assert.deepEqual(Object.keys(content).sort(), ['answers_count', 'dialogue', 'initial_question']);
   for (const secret of ['HISTORY-1', 'DEMO-FAMILY-001', 'Мама', '300000', '4111111111111111', '123456', 'gsk_fake_test']) assert.equal(JSON.stringify(packet).includes(secret), false, secret);
   assert.equal(result.state.balance, before.balance); assert.deepEqual(result.state.operations, before.operations);
-  assert.deepEqual(await f.reportRows(staff.cookie), []); assert.equal((await f.registry(staff.cookie)).length, 8);
+  assert.deepEqual(await f.reportRows(staff.cookie), []); assert.equal((await f.registry(staff.cookie)).length, 10);
 });
 
 test('provider failure preserves the complaint and allows submission without an AI answer', async () => {
@@ -145,7 +145,7 @@ test('provider failure preserves the complaint and allows submission without an 
   assert.equal(result.status, 200, JSON.stringify(result.body));
   const row = result.body.state.fraudReports.find(report => report.id === created.reportId);
   assert.equal(row.status, 'draft'); assert.equal(row.turns[0].status, 'error'); assert.equal(row.turns[0].message, CLAIM);
-  assert.equal((await f.registry(staff.cookie)).length, 8);
+  assert.equal((await f.registry(staff.cookie)).length, 10);
   const submitted = await f.submit(client.cookie, created.reportId, 'Прошу рассмотреть обращение без ответа ИИ.');
   assert.equal(submitted.state.fraudReports.find(report => report.id === created.reportId).status, 'submitted');
   assert.equal((await f.reportRows(staff.cookie)).length, 1);
@@ -219,7 +219,7 @@ test('staff must see a submitted case and provide a valid verdict and substantiv
     const result = await f.action({ action: 'report-review', reportId: created.reportId, comment: 'Проверка сотрудником.', ...value }, staff.cookie);
     assert.equal(result.status, 400, JSON.stringify(result));
   }
-  assert.equal((await f.registry(staff.cookie)).length, 8);
+  assert.equal((await f.registry(staff.cookie)).length, 10);
 });
 
 test('duplicate and concurrent chat requests make one model call and return cached state', async () => {
@@ -267,7 +267,7 @@ test('withdrawing an in-flight complaint prevents a late model response from rev
   const rows = await f.reportRows(client.cookie), row = rows.find(report => report.id === created.reportId);
   assert.ok(!row || row.status === 'withdrawn');
   assert.equal(JSON.stringify(row || {}).includes('По словам клиента'), false);
-  assert.deepEqual(await f.reportRows(staff.cookie), []); assert.equal((await f.registry(staff.cookie)).length, 8);
+  assert.deepEqual(await f.reportRows(staff.cookie), []); assert.equal((await f.registry(staff.cookie)).length, 10);
 });
 
 test('demo reset clears reports and complaint-generated marks while preserving base registry', async () => {

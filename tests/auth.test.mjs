@@ -67,7 +67,7 @@ test('URL checks never alter bank balances, state, recipient registry or store s
   assert.deepEqual(f.sql.prepare('SELECT data, revision FROM bank_state').get(), before);
   assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM login_limits').all()).includes('do-not-store-123'), false);
   assert.equal('allowed' in response.body.result, false);
-  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM registry').get().n, 8);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM registry').get().n, 10);
 });
 
 test('URL API rejects invalid input and has a persistent quota across requests', async () => {
@@ -114,7 +114,7 @@ test('client cannot access registry, staff actions or another role through query
 });
 test('employee may read registry but cannot impersonate client for transfers or access changes', async () => {
   const f = fixture(), employee = await f.login('employee');
-  assert.equal((await f.call('/api/registry', undefined, employee.cookie)).body.entries.length, 8);
+  assert.equal((await f.call('/api/registry', undefined, employee.cookie)).body.entries.length, 10);
   for (const action of ['phone', 'recovery', 'attempt', 'confirm', 'ticket']) assert.equal((await f.call('/api/action', { action }, employee.cookie)).status, 403);
 });
 test('pause and balance are server owned; staff reply does not lift pause', async () => {
@@ -291,11 +291,11 @@ test('fixture histories are synthetic, old enough for a pause and never debit th
   assert.equal(ordinary.body.decision.code, 'NEW_RECIPIENT_HOLD');
 });
 
-test('three selectable watch recipients consistently enter additional review and expose the AI workflow', async () => {
+test('five policy watch fixtures consistently enter additional review and expose the AI workflow', async () => {
   const f = fixture(), client = await f.login('client');
   const before = await f.call('/api/state', undefined, client.cookie);
   const watch = before.body.state.recipients.filter(r => r.reviewDemo);
-  assert.deepEqual(watch.map(r => r.id), ['DEMO-WATCH-001', 'DEMO-WATCH-002', 'DEMO-WATCH-003']);
+  assert.deepEqual(watch.map(r => r.id), ['DEMO-WATCH-001', 'DEMO-WATCH-002', 'DEMO-WATCH-003', 'DEMO-WATCH-004', 'DEMO-WATCH-005']);
   assert.ok(watch.every(r => r.suggestedAmount === 100000));
   for (const recipient of watch) {
     const result = await f.call('/api/action', { action: 'attempt', ...transfer({ recipientId: recipient.id, amount: recipient.suggestedAmount }) }, client.cookie);
@@ -303,6 +303,26 @@ test('three selectable watch recipients consistently enter additional review and
     assert.equal(result.body.operation.status, 'pending'); assert.equal(result.body.operation.review.status, 'pending');
     assert.equal(result.body.operation.classification.source, 'policy');
     assert.equal(result.body.state.balance, before.body.state.balance);
+  }
+});
+
+test('recipient catalogue exposes five clearly labelled options for normal, review and block scenarios', async () => {
+  const features = Object.fromEntries(TRANSFER_MODEL_FEATURES.map(name => [name, 1]));
+  const f = fixture({ TRANSFER_MODEL_URL: 'http://127.0.0.1:8101/v1/classify', transferModelFetch: async (_url, options) => {
+    const amount = JSON.parse(options.body).operation.amount;
+    const decision = amount === 500 ? 0 : amount === 3250 ? 1 : amount === 50000 ? 2 : -1;
+    return new Response(JSON.stringify({ decision, p_fraud: [0.05, 0.25, 0.75][decision], model_version: 'fraud-hgb-catalogue', thresholds: { review: 0.14, block: 0.46 }, features }), { status: 200 });
+  } }), client = await f.login('client');
+  const view = await f.call('/api/state', undefined, client.cookie);
+  for (const [group, label] of [['normal', /\(обычный перевод\)$/], ['review', /\(ML: доп\. проверка \+ ИИ\)$/], ['block', /\(ML: блокировка\)$/]]) {
+    const recipients = view.body.state.recipients.filter(r => r.demoGroup === group);
+    assert.equal(recipients.length, 5, group);
+    assert.ok(recipients.every(r => label.test(r.name) && Number.isSafeInteger(r.suggestedAmount)), group);
+    for (const recipient of recipients) {
+      const result = await f.call('/api/action', { action: 'attempt', ...transfer({ recipientId: recipient.id, amount: recipient.suggestedAmount }) }, client.cookie);
+      assert.equal(result.body.decision.code, { normal: 'READY', review: 'MODEL_REVIEW', block: 'MODEL_BLOCK' }[group]);
+      assert.equal(result.body.classification.source, 'ml'); assert.equal(result.body.state.balance, view.body.state.balance);
+    }
   }
 });
 
@@ -533,7 +553,7 @@ test('AI block recommendation stops the attached review operation but standalone
   const rt = aiRuntime(aiReply({ class: 'block', scenario: 'safe_account', evidence: [message], explanation: 'Есть признаки обмана.', next_question: null }));
   const f = fixture(rt), c = await f.login('client'), staff = await f.login('employee');
   const standalone = await f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, message }, c.cookie);
-  assert.equal(standalone.body.state.operations.length, 6); assert.equal(standalone.body.state.securityLock, null);
+  assert.equal(standalone.body.state.operations.length, 9); assert.equal(standalone.body.state.securityLock, null);
   await f.call('/api/action', { action: 'model-mode', mode: 'review' }, staff.cookie);
   const pending = await f.call('/api/action', { action: 'attempt', ...transfer() }, c.cookie), id = pending.body.operation.id;
   const blocked = await f.call('/api/assistant', { requestId: crypto.randomUUID(), consent: true, message, operationId: id }, c.cookie);
@@ -579,5 +599,5 @@ test('staff cannot approve while AI is processing; demo reset cannot be undone b
   release(); const final = await running;
   assert.equal(final.status, 409);
   const view = await f.call('/api/state', undefined, c.cookie);
-  assert.equal(view.body.state.aiConversations.length, 0); assert.equal(view.body.state.operations.length, 6);
+  assert.equal(view.body.state.aiConversations.length, 0); assert.equal(view.body.state.operations.length, 9);
 });

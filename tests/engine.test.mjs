@@ -13,8 +13,8 @@ test('existing demo state gains fixture history once without changing balance or
   s.lastCriticalChange = t - 1000;
   ensureDemoRecipientHistory(s, t);
   ensureDemoRecipientHistory(s, t + 2000);
-  assert.equal(s.operations.length, 6);
-  assert.deepEqual(s.operations.slice(0, 3), old);
+  assert.equal(s.operations.length, 9);
+  assert.deepEqual(s.operations.slice(0, old.length), old);
   assert.equal(s.balance, balance);
   for (const id of ['DEMO-CLASS-NORMAL', 'DEMO-CLASS-REVIEW', 'DEMO-CLASS-BLOCK']) assert.equal(isKnown(s, id, t), true);
 });
@@ -31,7 +31,7 @@ test('no pause initially; cash and transfers require confirmation without immedi
   assert.equal(attempt(s, transfer(), [], t).decision.allowed, true);
   assert.equal(attempt(s, { kind: 'cash', amount: 100000 }, [], t).decision.allowed, true);
   assert.equal(s.balance, balance);
-  assert.equal(s.operations.length, 6);
+  assert.equal(s.operations.length, 9);
 });
 test('phone change blocks new recipient without debit', () => {
   const s = initialState(t), balance = s.balance;

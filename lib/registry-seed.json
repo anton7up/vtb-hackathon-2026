@@ -7,7 +7,7 @@
   "entries": [
     {
       "recipient_id": "DEMO-WATCH-001",
-      "display_name": "Алексей Орлов · дополнительная проверка",
+      "display_name": "Алексей Орлов (доп. проверка + ИИ)",
       "status": "watch",
       "reason_code": "DEMO_ADDITIONAL_REVIEW",
       "reason": "Вымышленный учебный счёт с отметкой дополнительной проверки",
@@ -17,7 +17,7 @@
     },
     {
       "recipient_id": "DEMO-WATCH-002",
-      "display_name": "Маркет электроники · дополнительная проверка",
+      "display_name": "Маркет электроники (доп. проверка + ИИ)",
       "status": "watch",
       "reason_code": "DEMO_ADDITIONAL_REVIEW",
       "reason": "Вымышленный учебный счёт с отметкой дополнительной проверки",
@@ -27,7 +27,27 @@
     },
     {
       "recipient_id": "DEMO-WATCH-003",
-      "display_name": "Частный продавец · дополнительная проверка",
+      "display_name": "Частный продавец (доп. проверка + ИИ)",
+      "status": "watch",
+      "reason_code": "DEMO_ADDITIONAL_REVIEW",
+      "reason": "Вымышленный учебный счёт с отметкой дополнительной проверки",
+      "scenario": "manual_review",
+      "action": "review_transfer",
+      "source": "synthetic_hackathon_data"
+    },
+    {
+      "recipient_id": "DEMO-WATCH-004",
+      "display_name": "Сервис объявлений (доп. проверка + ИИ)",
+      "status": "watch",
+      "reason_code": "DEMO_ADDITIONAL_REVIEW",
+      "reason": "Вымышленный учебный счёт с отметкой дополнительной проверки",
+      "scenario": "manual_review",
+      "action": "review_transfer",
+      "source": "synthetic_hackathon_data"
+    },
+    {
+      "recipient_id": "DEMO-WATCH-005",
+      "display_name": "Новый поставщик (доп. проверка + ИИ)",
       "status": "watch",
       "reason_code": "DEMO_ADDITIONAL_REVIEW",
       "reason": "Вымышленный учебный счёт с отметкой дополнительной проверки",
@@ -37,7 +57,7 @@
     },
     {
       "recipient_id": "DEMO-RISK-001",
-      "display_name": "Демо получатель 1",
+      "display_name": "Безопасный счёт мошенников (блокировка)",
       "status": "active",
       "reason_code": "DEMO_CONFIRMED_FRAUD_REPORT",
       "reason": "Смоделированное подтверждённое обращение о мошенническом переводе",
@@ -47,7 +67,7 @@
     },
     {
       "recipient_id": "DEMO-RISK-002",
-      "display_name": "Демо получатель 2",
+      "display_name": "Фишинговый получатель (блокировка)",
       "status": "active",
       "reason_code": "DEMO_PHISHING_REPORT",
       "reason": "Смоделированная связь получателя с фишинговой схемой",
@@ -57,7 +77,7 @@
     },
     {
       "recipient_id": "DEMO-RISK-003",
-      "display_name": "Демо получатель 3",
+      "display_name": "Захваченный аккаунт (блокировка)",
       "status": "active",
       "reason_code": "DEMO_ACCOUNT_TAKEOVER_REPORT",
       "reason": "Смоделированная связь с переводом из захваченного аккаунта",
@@ -67,7 +87,7 @@
     },
     {
       "recipient_id": "DEMO-RISK-004",
-      "display_name": "Демо получатель 4",
+      "display_name": "Лжеинвестиции (блокировка)",
       "status": "active",
       "reason_code": "DEMO_INVESTMENT_SCAM_REPORT",
       "reason": "Смоделированное обращение об инвестиционном обмане",
@@ -77,7 +97,7 @@
     },
     {
       "recipient_id": "DEMO-RISK-005",
-      "display_name": "Демо получатель 5",
+      "display_name": "Счёт посредника (блокировка)",
       "status": "active",
       "reason_code": "DEMO_MULE_ACCOUNT_REPORT",
       "reason": "Смоделированная связь со счётом посредника в цепочке хищения",
