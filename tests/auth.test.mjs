@@ -42,11 +42,55 @@ test('anonymous cannot read bank data or mutate it', async () => {
   assert.equal((await f.call('/api/registry')).status, 401);
   assert.equal((await f.call('/api/action', { action: 'reset' })).status, 401);
 });
-test('two DB accounts, salted hashes, no password exposure, secure session cookie', async () => {
+
+test('real URL model is authenticated, CSRF protected and independent of Groq', async () => {
+  const f = fixture();
+  assert.equal((await f.call('/api/phishing/check', { url: 'https://shop.example/' })).status, 401);
+  const client = await f.login('client'), staff = await f.login('employee');
+  assert.equal((await f.call('/api/phishing/check', { url: 'https://shop.example/' }, client.cookie, { Origin: 'https://evil.example' })).status, 403);
+  for (const cookie of [client.cookie, staff.cookie]) {
+    const response = await f.call('/api/phishing/check', { url: 'https://shop.example/' }, cookie);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.result.source, 'ml');
+    assert.match(response.body.result.model_version, /^phiusiil-tfidf-lr-/);
+    assert.equal(response.body.result.input_type, 'url_only');
+    assert.equal('url' in response.body.result, false);
+  }
+});
+
+test('URL checks never alter bank balances, state, recipient registry or store submitted URLs', async () => {
+  const f = fixture(), client = await f.login('client');
+  const before = f.sql.prepare('SELECT data, revision FROM bank_state').get();
+  const url = 'https://shop.example/?private-token=do-not-store-123';
+  const response = await f.call('/api/phishing/check', { url, classification: { class: 'normal' }, allowed: true }, client.cookie);
+  assert.equal(response.status, 200);
+  assert.deepEqual(f.sql.prepare('SELECT data, revision FROM bank_state').get(), before);
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM login_limits').all()).includes('do-not-store-123'), false);
+  assert.equal('allowed' in response.body.result, false);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM registry').get().n, 5);
+});
+
+test('URL API rejects invalid input and has a persistent quota across requests', async () => {
+  const f = fixture(), client = await f.login('client');
+  for (const url of ['javascript:alert(1)', 'https://user:pass@example.com/', 'not a url', null]) assert.equal((await f.call('/api/phishing/check', { url }, client.cookie)).status, 400);
+  const keyPrefixCountBefore = f.sql.prepare('SELECT COUNT(*) AS n FROM login_limits').get().n;
+  assert.equal(keyPrefixCountBefore, 1); // Login counter only; invalid input does not spend inference quota.
+  const first = await f.call('/api/phishing/check', { url: 'https://shop.example/' }, client.cookie);
+  assert.equal(first.status, 200);
+  const enc = new TextEncoder();
+  // Account IDs come from the actual session rather than any client-supplied field.
+  const userId = (await f.call('/api/auth/me', undefined, client.cookie)).body.user.id;
+  const digest = await crypto.subtle.digest('SHA-256', enc.encode(`url-check:${userId}:${Math.floor(Date.now() / 60000)}`));
+  const key = [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, '0')).join('');
+  f.sql.prepare('UPDATE login_limits SET attempts = 30 WHERE key = ?').run(key);
+  assert.equal((await f.call('/api/phishing/check', { url: 'https://shop.example/' }, client.cookie)).status, 429);
+});
+test('four DB accounts in two roles, salted hashes, no password exposure, secure session cookie', async () => {
   const f = fixture(); const client = await f.login('client'), staff = await f.login('employee');
   assert.equal(client.status, 200); assert.equal(staff.status, 200);
   assert.equal(client.body.user.role, 'client'); assert.equal(staff.body.user.role, 'employee');
-  const users = f.sql.prepare('SELECT * FROM accounts').all(); assert.equal(users.length, 2);
+  const users = f.sql.prepare('SELECT * FROM accounts').all(); assert.equal(users.length, 4);
+  assert.equal(users.filter(row => row.role === 'client').length, 3);
   assert.equal(users[0].password_hash.length, 64); assert.notEqual(users[0].password_hash, 'ClientDemo2026!');
   assert.equal('passwordHash' in client.body.user, false); assert.equal('password_hash' in staff.body.user, false);
   assert.match(client.cookieHeader, /HttpOnly/); assert.match(client.cookieHeader, /Secure/); assert.match(client.cookieHeader, /SameSite=Strict/);
