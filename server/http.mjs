@@ -6,6 +6,7 @@ import { loginPage, dashboardPage } from './pages.mjs';
 const publicRoot = new URL('../public/', import.meta.url);
 const assets = new Map([
   ['/app.mjs', ['app.mjs', 'text/javascript']], ['/login.mjs', ['login.mjs', 'text/javascript']],
+  ['/request-id.mjs', ['request-id.mjs', 'text/javascript']],
   ['/review-assistant.mjs', ['review-assistant.mjs', 'text/javascript']], ['/style.css', ['style.css', 'text/css']],
   ['/redesign.css', ['redesign.css', 'text/css']],
   ['/site-inspection.mjs', ['site-inspection.mjs', 'text/javascript']],

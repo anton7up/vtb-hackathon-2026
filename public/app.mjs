@@ -10,6 +10,7 @@ import { renderCbrWarningCheck } from './cbr-warning-view.mjs';
 import { renderTrustedSettings, renderTrustedInbox, renderTrustedQueue, renderTrustedOperation } from './trusted-view.mjs';
 import { renderPurchaseCheck, renderPurchaseCase } from './purchase-view.mjs';
 import { renderRecoveryOwner, renderRecoveryStaff } from './recovery-view.mjs';
+import { createRequestId } from './request-id.mjs';
 async function api(path, body, options = {}) {
   const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: options.signal });
   const data = await response.json();
@@ -270,7 +271,7 @@ async function attemptQrPayment(mode) {
   const payload = currentQrPayload(mode);
   if (!payload || !payment?.supported || !['clear', 'watch'].includes(payment.registryStatus)) return;
   const request = { kind: 'transfer', recipientId: payment.recipient.id, recipientName: payment.recipient.name, amount: payment.amountKopecks,
-    qrPayload: payload, qrFixtureId: payment.fixtureId, requestId: crypto.randomUUID() };
+    qrPayload: payload, qrFixtureId: payment.fixtureId, requestId: createRequestId() };
   ui.qrPaymentBusy = true; render();
   try { await prepareOperation(request); }
   finally { ui.qrPaymentBusy = false; render(); }
@@ -472,7 +473,7 @@ function decisionDialog(decision, request, operation, readOnly = false) {
 let pendingRequest = null;
 async function submitOperation() {
   const request = requestFromForm();
-  request.requestId = crypto.randomUUID();
+  request.requestId = createRequestId();
   if (request.amount === null) { $('#form-error').textContent = 'Введите положительную сумму, не более двух знаков после запятой.'; return; }
   await prepareOperation(request);
 }
@@ -708,7 +709,7 @@ document.addEventListener('submit', async e => {
       if (ui.complaintBusy) return;
       const report = (state.fraudReports || []).find(r => r.id === ui.complaintId) || state.fraudReports?.[0];
       if (!report || !ui.complaintConsent || !ui.complaintDraft.trim()) { toast('Напишите ответ и подтвердите согласие на внешний ИИ.'); return; }
-      ui.complaintRequestId ||= crypto.randomUUID();
+      ui.complaintRequestId ||= createRequestId();
       const payload = { reportId: report.id, message: ui.complaintDraft.trim(), consent: true, requestId: ui.complaintRequestId };
       ui.complaintBusy = true; ui.complaintError = ''; render();
       try {
@@ -746,7 +747,7 @@ document.addEventListener('submit', async e => {
       if (ui.aiBusy) return;
       const message = ui.aiDraft.trim();
       if (!message || !ui.aiConsent) { toast('Напишите объяснение и подтвердите согласие'); return; }
-      ui.aiRequestId ||= crypto.randomUUID();
+      ui.aiRequestId ||= createRequestId();
       const payload = { message, consent: ui.aiConsent, requestId: ui.aiRequestId, conversationId: ui.aiConversationId, operationId: ui.aiConversationId ? undefined : ui.aiOperationId || undefined };
       ui.aiBusy = true; render();
       try {
