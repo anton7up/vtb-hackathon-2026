@@ -6,6 +6,36 @@
   "matching_field": "recipient_id",
   "entries": [
     {
+      "recipient_id": "DEMO-WATCH-001",
+      "display_name": "Алексей Орлов · дополнительная проверка",
+      "status": "watch",
+      "reason_code": "DEMO_ADDITIONAL_REVIEW",
+      "reason": "Вымышленный учебный счёт с отметкой дополнительной проверки",
+      "scenario": "manual_review",
+      "action": "review_transfer",
+      "source": "synthetic_hackathon_data"
+    },
+    {
+      "recipient_id": "DEMO-WATCH-002",
+      "display_name": "Маркет электроники · дополнительная проверка",
+      "status": "watch",
+      "reason_code": "DEMO_ADDITIONAL_REVIEW",
+      "reason": "Вымышленный учебный счёт с отметкой дополнительной проверки",
+      "scenario": "manual_review",
+      "action": "review_transfer",
+      "source": "synthetic_hackathon_data"
+    },
+    {
+      "recipient_id": "DEMO-WATCH-003",
+      "display_name": "Частный продавец · дополнительная проверка",
+      "status": "watch",
+      "reason_code": "DEMO_ADDITIONAL_REVIEW",
+      "reason": "Вымышленный учебный счёт с отметкой дополнительной проверки",
+      "scenario": "manual_review",
+      "action": "review_transfer",
+      "source": "synthetic_hackathon_data"
+    },
+    {
       "recipient_id": "DEMO-RISK-001",
       "display_name": "Демо получатель 1",
       "status": "active",

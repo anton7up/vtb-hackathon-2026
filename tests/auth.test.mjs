@@ -67,7 +67,7 @@ test('URL checks never alter bank balances, state, recipient registry or store s
   assert.deepEqual(f.sql.prepare('SELECT data, revision FROM bank_state').get(), before);
   assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM login_limits').all()).includes('do-not-store-123'), false);
   assert.equal('allowed' in response.body.result, false);
-  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM registry').get().n, 5);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM registry').get().n, 8);
 });
 
 test('URL API rejects invalid input and has a persistent quota across requests', async () => {
@@ -114,7 +114,7 @@ test('client cannot access registry, staff actions or another role through query
 });
 test('employee may read registry but cannot impersonate client for transfers or access changes', async () => {
   const f = fixture(), employee = await f.login('employee');
-  assert.equal((await f.call('/api/registry', undefined, employee.cookie)).body.entries.length, 5);
+  assert.equal((await f.call('/api/registry', undefined, employee.cookie)).body.entries.length, 8);
   for (const action of ['phone', 'recovery', 'attempt', 'confirm', 'ticket']) assert.equal((await f.call('/api/action', { action }, employee.cookie)).status, 403);
 });
 test('pause and balance are server owned; staff reply does not lift pause', async () => {
@@ -289,6 +289,21 @@ test('fixture histories are synthetic, old enough for a pause and never debit th
   for (const op of r.body.state.operations.filter(o => o.id.startsWith('HISTORY-DEMO-CLASS-'))) assert.equal(op.seeded, true);
   const ordinary = await f.call('/api/action', { action: 'attempt', ...transfer({ recipientId: 'DEMO-NEW-001' }) }, client.cookie);
   assert.equal(ordinary.body.decision.code, 'NEW_RECIPIENT_HOLD');
+});
+
+test('three selectable watch recipients consistently enter additional review and expose the AI workflow', async () => {
+  const f = fixture(), client = await f.login('client');
+  const before = await f.call('/api/state', undefined, client.cookie);
+  const watch = before.body.state.recipients.filter(r => r.reviewDemo);
+  assert.deepEqual(watch.map(r => r.id), ['DEMO-WATCH-001', 'DEMO-WATCH-002', 'DEMO-WATCH-003']);
+  assert.ok(watch.every(r => r.suggestedAmount === 100000));
+  for (const recipient of watch) {
+    const result = await f.call('/api/action', { action: 'attempt', ...transfer({ recipientId: recipient.id, amount: recipient.suggestedAmount }) }, client.cookie);
+    assert.equal(result.status, 200); assert.equal(result.body.decision.code, 'MODEL_REVIEW');
+    assert.equal(result.body.operation.status, 'pending'); assert.equal(result.body.operation.review.status, 'pending');
+    assert.equal(result.body.operation.classification.source, 'policy');
+    assert.equal(result.body.state.balance, before.body.state.balance);
+  }
 });
 
 test('registry and security lock override the fixed normal fixture class', async () => {

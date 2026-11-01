@@ -400,9 +400,11 @@ function updateRecipientInfo() {
   if (!$('#recipient-info')) return;
   const request = requestFromForm();
   const known = isKnown(state, request.recipientId, now());
-  const demoClass = allRecipients().find(r => r.id === request.recipientId)?.demoClass;
+  const recipient = allRecipients().find(r => r.id === request.recipientId);
+  const demoClass = recipient?.demoClass;
   $('#recipient-info').innerHTML = `<span class="pill ${known ? 'green' : 'blue'}">${icon('user')}${known ? 'Прежний получатель' : 'Новый получатель'}</span><span class="pill">${icon('shield')}Проверка перед отправкой</span><span class="pill">${esc(request.recipientId || 'Демо-ID не указан')}</span>`;
   if (demoClass) $('#recipient-info').insertAdjacentHTML('beforeend', `<span class="pill ${demoClass === 'normal' ? 'green' : demoClass === 'block' ? 'red' : 'amber'}">Тестовый класс: ${esc(classNames[demoClass])}</span><p class="field-help demo-recipient-note">Класс задан для демонстрации, не предсказан ML. Есть вымышленная история прежних переводов. Реестр и блокировка аккаунта имеют приоритет.</p>`);
+  if (recipient?.reviewDemo) $('#recipient-info').insertAdjacentHTML('beforeend', `<span class="pill amber">${icon('clock')}Счёт дополнительной проверки</span><p class="field-help demo-recipient-note">Учебная отметка направит перевод на проверку сотруднику. Для стабильного сценария используйте предложенную сумму 1 000 ₽. Деньги не спишутся; чат с ИИ открывается отдельно из карточки перевода.</p>`);
 }
 function statusPill(op) { return `<span class="pill ${op.status === 'completed' ? 'green' : op.status === 'pending' ? 'amber' : 'red'}">${op.status === 'completed' ? 'Выполнено' : op.status === 'pending' ? 'На проверке' : 'Остановлено'}</span>${classificationPill(op.classification, op.seeded || op.kind !== 'transfer')}`; }
 const classNames = { normal: 'Нормальный', review: 'Нужно проверить', block: 'Блокировка' };
@@ -661,7 +663,12 @@ document.addEventListener('change', e => {
   if (e.target.id === 'qr-file') { clearQrResult(); ui.qrFile = e.target.files?.[0] || null; ui.qrMode = 'file'; ui.qrText = ''; render(); }
   if (e.target.id === 'ai-operation') ui.aiOperationId = e.target.value;
   if (e.target.id === 'ai-consent') ui.aiConsent = e.target.checked;
-  if (e.target.id === 'recipient') { ui.recipient = e.target.value; $('#custom-recipient').hidden = ui.recipient !== 'custom'; updateRecipientInfo(); }
+  if (e.target.id === 'recipient') {
+    ui.recipient = e.target.value;
+    const recipient = allRecipients().find(r => r.id === ui.recipient);
+    if (recipient?.reviewDemo && Number.isSafeInteger(recipient.suggestedAmount)) { ui.amount = String(recipient.suggestedAmount / 100); if ($('#amount')) $('#amount').value = ui.amount; }
+    $('#custom-recipient').hidden = ui.recipient !== 'custom'; updateRecipientInfo();
+  }
   if (e.target.id === 'operation-filter') { ui.filter = e.target.value; render(); }
 });
 document.addEventListener('submit', async e => {
