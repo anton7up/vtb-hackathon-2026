@@ -341,6 +341,20 @@ test('recipient catalogue exposes five clearly labelled options for normal, revi
   assert.deepEqual(modelRequests.at(-1).history, modelRequests.find(payload => payload.operation.receiver_id === repeatedRecipient.id).history);
 });
 
+test('state exposes safe aggregate recipient options backed by the transfer ledger', async () => {
+  const f = fixture(), client = await f.login('client');
+  const view = await f.call('/api/state', undefined, client.cookie);
+  const recipients = view.body.state.ledgerRecipients;
+  assert.ok(Array.isArray(recipients) && recipients.length > 0);
+  assert.ok(recipients.every(r => r.dbTest && !('demoGroup' in r) && !('demoClass' in r)));
+  const history = recipients.find(r => r.id === 'DEMO-RISK-002');
+  assert.equal(history.dbStats.transactionCount, 3);
+  assert.equal(history.dbStats.senderCount, 3);
+  assert.ok(Number.isFinite(history.dbStats.lastSeenAt));
+  assert.equal(history.suggestedAmount, 100000);
+  assert.equal(Object.hasOwn(history.dbStats, 'clientId'), false);
+});
+
 test('registry and security lock override the fixed normal fixture class', async () => {
   const f = fixture(), client = await f.login('client'), staff = await f.login('employee');
   await f.call('/api/action', { action: 'registry-add', entry: { recipient_id: 'DEMO-CLASS-NORMAL', display_name: 'Тест', reason: 'Тест приоритета реестра' } }, staff.cookie);

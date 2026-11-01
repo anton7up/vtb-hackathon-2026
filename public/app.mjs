@@ -75,6 +75,10 @@ if (location.hash === '#profile' && account.role === 'client') ui.page = 'profil
 if (location.hash === '#trusted' && account.role === 'client') ui.page = 'trusted';
 const registry = () => baseRegistry;
 const allRecipients = () => state.recipients;
+const ledgerRecipients = () => state.ledgerRecipients || [];
+const selectedRecipient = () => ui.recipient.startsWith('db:')
+  ? ledgerRecipients().find(r => r.id === ui.recipient.slice(3))
+  : allRecipients().find(r => r.id === ui.recipient);
 async function action(name, data = {}) {
   if (ui.clientSwitchBusy) throw new Error('Дождитесь переключения клиента');
   ui.actionBusy++;
@@ -350,7 +354,9 @@ function policyView() {
 }
 function transferView() {
   const groupLabels = { normal: 'Обычный перевод — 5 вариантов', review: 'Дополнительная проверка и ИИ — 5 вариантов', block: 'Блокировка — 5 вариантов' };
-  const options = Object.entries(groupLabels).map(([group, label]) => `<optgroup label="${esc(label)}">${allRecipients().filter(r => r.demoGroup === group).map(r => `<option value="${esc(r.id)}" ${ui.recipient === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</optgroup>`).join('');
+  const fixedOptions = Object.entries(groupLabels).map(([group, label]) => `<optgroup label="${esc(label)}">${allRecipients().filter(r => r.demoGroup === group).map(r => `<option value="${esc(r.id)}" ${ui.recipient === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</optgroup>`).join('');
+  const dbOptions = ledgerRecipients().length ? `<optgroup label="Из истории БД — для тестирования (${ledgerRecipients().length})">${ledgerRecipients().map(r => `<option value="db:${esc(r.id)}" ${ui.recipient === `db:${r.id}` ? 'selected' : ''}>${esc(r.name)} · ${r.dbStats.transactionCount} оп.</option>`).join('')}</optgroup>` : '';
+  const options = fixedOptions + dbOptions;
   return `<div class="grid-main"><div>${balanceCard()}<section class="panel"><h2>Новая операция</h2><div class="segment" role="group" aria-label="Тип операции"><button data-kind="transfer" type="button" class="${ui.kind === 'transfer' ? 'active' : ''}">${icon('transfer')} Перевод</button><button data-kind="cash" type="button" class="${ui.kind === 'cash' ? 'active' : ''}">${icon('cash')} Наличные</button></div><form id="operation-form" novalidate>${ui.kind === 'transfer' ? `<label class="field-label" for="recipient">Кому переводим</label><select id="recipient" name="recipient">${options}<option value="custom" ${ui.recipient === 'custom' ? 'selected' : ''}>Другой получатель по демо-ID</option></select><div id="custom-recipient" ${ui.recipient === 'custom' ? '' : 'hidden'}><label class="field-label" for="custom-id">Демонстрационный ID</label><input id="custom-id" maxlength="50" placeholder="DEMO-NEW-002" value="${esc(ui.customId)}"><label class="field-label" for="custom-name">Имя для истории</label><input id="custom-name" maxlength="80" placeholder="Новый получатель" value="${esc(ui.customName)}"></div><div class="recipient-meta" id="recipient-info"></div>` : `<div class="notice">${icon('cash')} Демонстрация снятия наличных. Банкомат и карта не подключены.</div>`}<label class="field-label" for="amount">Сумма, ₽</label><input class="amount-input" id="amount" inputmode="decimal" autocomplete="off" value="${esc(ui.amount)}" aria-describedby="amount-help"><p class="field-help" id="amount-help">${ui.kind === 'transfer' ? 'Комиссия в демо — 0 ₽' : 'Деньги списываются только после подтверждения'}</p><p id="form-error" class="dialog-error" role="alert"></p><button class="button full" type="submit">Проверить ${ui.kind === 'transfer' ? 'перевод' : 'снятие'} ${icon('arrow')}</button><p class="secure-caption">${icon('lock')} Сначала проверка, затем подтверждение</p></form></section></div><aside class="transfer-aside">${reviewQueueShortcut()}${policyView()}</aside></div>${operationsTable(state.operations.slice(0, 5), false, 'Последние операции')}`;
 }
 const scenarioNames = { none: 'Явная схема не выявлена', unknown: 'Недостаточно данных', safe_account: 'Безопасный счёт', law_enforcement: 'Требование от имени МВД / госоргана', phishing: 'Фишинг', remote_access: 'Удалённый доступ', impersonation: 'Подмена знакомого', investment: 'Лжеинвестиции', loan_pressure: 'Кредит под давлением', cash_courier: 'Наличные для курьера' };
@@ -394,20 +400,21 @@ function staffAssistantReports() {
   return `<section class="panel model-panel"><div class="section-head"><h2>Предварительные проверки ИИ</h2><small>Последние ${Math.min(conversations.length, 5)}</small></div><p class="panel-subtitle">Рекомендация не является проверкой личности или разрешением платежа. Сверяйте её с ответами клиента и независимыми сигналами.</p>${conversations.slice(0, 5).map(c => `<details class="ai-report"><summary>${esc(c.operationId || 'Общая проверка')} · ${esc(date(c.createdAt))} · ${esc(c.assessment ? classNames[c.assessment.class] : 'Ошибка сервиса')}</summary>${c.operationId ? '' : '<p class="field-help">Без привязки к переводу; операций не блокирует.</p>'}${aiTurnsView(c)}</details>`).join('') || '<p class="empty">Клиент ещё не обращался к ИИ-помощнику.</p>'}</section>`;
 }
 function requestFromForm() {
-  const r = allRecipients().find(r => r.id === ui.recipient);
-  return { kind: ui.kind, amount: parseAmount(ui.amount), recipientId: ui.kind === 'cash' ? undefined : ui.recipient === 'custom' ? ui.customId.trim().toUpperCase() : ui.recipient, recipientName: ui.kind === 'cash' ? 'Наличные' : r?.name ?? (ui.customName.trim() || ui.customId.trim().toUpperCase()), ...(ui.purchaseCheckId && ui.kind === 'transfer' ? { purchaseCheckId: ui.purchaseCheckId } : {}) };
+  const r = selectedRecipient();
+  return { kind: ui.kind, amount: parseAmount(ui.amount), recipientId: ui.kind === 'cash' ? undefined : ui.recipient === 'custom' ? ui.customId.trim().toUpperCase() : r?.id || ui.recipient, recipientName: ui.kind === 'cash' ? 'Наличные' : r?.name ?? (ui.customName.trim() || ui.customId.trim().toUpperCase()), ...(ui.purchaseCheckId && ui.kind === 'transfer' ? { purchaseCheckId: ui.purchaseCheckId } : {}) };
 }
 function updateRecipientInfo() {
   if (!$('#recipient-info')) return;
   const request = requestFromForm();
   const known = isKnown(state, request.recipientId, now());
-  const recipient = allRecipients().find(r => r.id === request.recipientId);
+  const recipient = selectedRecipient();
   const demoClass = recipient?.demoClass;
   $('#recipient-info').innerHTML = `<span class="pill ${known ? 'green' : 'blue'}">${icon('user')}${known ? 'Прежний получатель' : 'Новый получатель'}</span><span class="pill">${icon('shield')}Проверка перед отправкой</span><span class="pill">${esc(request.recipientId || 'Демо-ID не указан')}</span>`;
   if (demoClass) $('#recipient-info').insertAdjacentHTML('beforeend', `<span class="pill ${demoClass === 'normal' ? 'green' : demoClass === 'block' ? 'red' : 'amber'}">Тестовый класс: ${esc(classNames[demoClass])}</span><p class="field-help demo-recipient-note">Класс задан для демонстрации, не предсказан ML. Есть вымышленная история прежних переводов. Реестр и блокировка аккаунта имеют приоритет.</p>`);
   if (recipient?.demoGroup === 'normal') $('#recipient-info').insertAdjacentHTML('beforeend', `<span class="pill green">${icon('check')}Обычный ML-сценарий</span><p class="field-help demo-recipient-note">Фиксированный учебный профиль знакомого получателя не меняется после демонстрационных переводов. Сумма 500 ₽ подобрана для нормального результата; при изменении суммы модель пересчитает класс.</p>`);
   if (recipient?.demoGroup === 'review') $('#recipient-info').insertAdjacentHTML('beforeend', `<span class="pill amber">${icon('clock')}ML-сценарий дополнительной проверки</span><p class="field-help demo-recipient-note">Фиксированный учебный профиль нового получателя не меняется после попыток перевода. Сумма 3 250 ₽ даёт класс «Нужно проверить»; при изменении суммы модель пересчитает класс. Чат с ИИ открывается из карточки.</p>`);
   if (recipient?.demoGroup === 'block') $('#recipient-info').insertAdjacentHTML('beforeend', `<span class="pill red">${icon('lock')}ML-сценарий блокировки</span><p class="field-help demo-recipient-note">Фиксированный учебный профиль нового получателя не меняется после попыток перевода. В сочетании с суммой 50 000 ₽ модель даёт «Блокировку»; сумма сама по себе не означает мошенничество. При изменении суммы класс будет пересчитан.</p>`);
+  if (recipient?.dbTest) $('#recipient-info').insertAdjacentHTML('beforeend', `<span class="pill blue">${icon('history')}Живая история из БД</span><p class="field-help demo-recipient-note">В transfer_ledger: ${recipient.dbStats.transactionCount} операций, ${recipient.dbStats.senderCount} отправителей, средняя сумма ${money(recipient.suggestedAmount)}. Модель получит фактическую историю; результат может меняться после новых операций. Реестр банка имеет приоритет над ML.</p>`);
 }
 function statusPill(op) { return `<span class="pill ${op.status === 'completed' ? 'green' : op.status === 'pending' ? 'amber' : 'red'}">${op.status === 'completed' ? 'Выполнено' : op.status === 'pending' ? 'На проверке' : 'Остановлено'}</span>${classificationPill(op.classification, op.seeded || op.kind !== 'transfer')}`; }
 const classNames = { normal: 'Нормальный', review: 'Нужно проверить', block: 'Блокировка' };
@@ -668,8 +675,8 @@ document.addEventListener('change', e => {
   if (e.target.id === 'ai-consent') ui.aiConsent = e.target.checked;
   if (e.target.id === 'recipient') {
     ui.recipient = e.target.value;
-    const recipient = allRecipients().find(r => r.id === ui.recipient);
-    if (recipient?.reviewDemo && Number.isSafeInteger(recipient.suggestedAmount)) { ui.amount = String(recipient.suggestedAmount / 100); if ($('#amount')) $('#amount').value = ui.amount; }
+    const recipient = selectedRecipient();
+    if (Number.isSafeInteger(recipient?.suggestedAmount)) { ui.amount = String(recipient.suggestedAmount / 100); if ($('#amount')) $('#amount').value = ui.amount; }
     $('#custom-recipient').hidden = ui.recipient !== 'custom'; updateRecipientInfo();
   }
   if (e.target.id === 'operation-filter') { ui.filter = e.target.value; render(); }
