@@ -21,7 +21,7 @@ async function api(path, body, options = {}) {
 const { user: account } = await api('/api/auth/me');
 const landing = account.role === 'employee' ? '/employee' : '/client';
 if (location.pathname !== landing) location.replace(landing);
-let { state, assistant: assistantConfig, websiteInspector: inspectorConfig } = await api('/api/state');
+let { state, assistant: assistantConfig, transferClassifier: transferClassifierConfig, websiteInspector: inspectorConfig } = await api('/api/state');
 const staffClients = account.role === 'employee' ? (await api('/api/clients')).clients : [];
 let activeClientId = state.clientId;
 let clientSelectionEpoch = 0;
@@ -412,6 +412,7 @@ function classificationPill(value, hide = false) {
   return `<span class="model-result pill ${value?.class === 'normal' ? 'green' : value?.class === 'block' ? 'red' : 'amber'}">${value ? `Класс: ${esc(classNames[value.class] || 'Неизвестен')}` : 'Классификатор: нет ответа'}</span>${value ? `<small class="model-source">${source} · ${esc(value.model_version)}</small>` : ''}`;
 }
 function classifierControls() {
+  if (transferClassifierConfig?.configured) return `<section class="panel model-panel"><div class="section-head"><h2>Классификатор переводов</h2><span class="pill blue">ML-модель подключена</span></div><p class="panel-subtitle">Обученная модель оценивает сумму, баланс, время, нового получателя и историю операций. Результат не отменяет стоп-лист, защитную паузу и подтверждение клиента.</p><p class="field-help">0 — обычная проверка · 1 — сотрудник и ИИ-помощник · 2 — остановка конкретного перевода.</p></section>`;
   return `<section class="panel model-panel"><div class="section-head"><h2>Классификатор переводов</h2><span class="pill blue">Демо-заглушка · не ML</span></div><p class="panel-subtitle">Выберите ответ для новых проверок переводов. Клиент не управляет этим режимом. Пауза, реестр и блокировка аккаунта имеют приоритет.</p><form id="model-mode-form" class="model-controls"><div><label class="field-label" for="model-mode">Ответ заглушки</label><select id="model-mode">${[...Object.entries(classNames), ['unavailable', 'Сервис недоступен · проверка ошибки']].map(([value, label]) => `<option value="${value}" ${state.modelMock.mode === value ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></div><button type="submit" class="button secondary">Применить режим</button></form><p class="field-help">Сейчас: ${esc(classNames[state.modelMock.mode] || 'Нет ответа сервиса')}. Изменение режима не отправляет и не разблокирует ранее остановленные переводы.</p></section>`;
 }
 function staffReviewQueue() {

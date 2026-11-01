@@ -49,8 +49,9 @@ function classifier(operation, { esc }) {
   if (operation.kind !== 'transfer') return '<p>Классификатор переводов к этой операции не применяется.</p>';
   const result = operation.classification;
   if (!result) return '<p>Ответ классификатора не сохранён. Это не означает, что операция безопасна.</p>';
-  const source = result.source === 'mock' ? 'Демо-заглушка — не обученная ML-модель' : result.source === 'policy' ? result.model_version === 'recipient-reports-v1' ? 'Серверное правило реестра жалоб' : 'Серверное правило; это не прогноз ML-модели' : 'Источник классификации не подтверждён как обученная ML-модель';
-  return `<p><b>${esc(CLASSES[result.class] || 'Класс не распознан')}</b></p><p>${esc(source)}${present(result.model_version) ? ` · ${esc(result.model_version)}` : ''}</p>`;
+  const source = result.source === 'mock' ? 'Демо-заглушка — не обученная ML-модель' : result.source === 'ml' ? 'Обученная транзакционная ML-модель' : result.source === 'policy' ? result.model_version === 'recipient-reports-v1' ? 'Серверное правило реестра жалоб' : 'Серверное правило; это не прогноз ML-модели' : 'Источник классификации не подтверждён как обученная ML-модель';
+  const probability = result.source === 'ml' && Number.isFinite(result.p_fraud) ? ` · оценка риска ${(result.p_fraud * 100).toFixed(1)}%` : '';
+  return `<p><b>${esc(CLASSES[result.class] || 'Класс не распознан')}</b></p><p>${esc(source)}${present(result.model_version) ? ` · ${esc(result.model_version)}` : ''}${probability}</p>`;
 }
 function staffDecision(operation, helpers) {
   const { esc } = helpers;

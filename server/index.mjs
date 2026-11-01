@@ -23,6 +23,7 @@ const server = createAppServer({ db, runtime: {
   GROQ_API_KEY: process.env.GROQ_API_KEY,
   GROQ_API_URL: process.env.GROQ_API_URL,
   GROQ_RELAY_TOKEN: process.env.GROQ_RELAY_TOKEN,
+  TRANSFER_MODEL_URL: process.env.TRANSFER_MODEL_URL,
   inspectWebsite: inspector,
   cbrWarning: createCbrWarningService(),
 }, publicOrigin: process.env.PUBLIC_ORIGIN });
