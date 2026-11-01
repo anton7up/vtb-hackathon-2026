@@ -1,0 +1,24 @@
+[Unit]
+Description=VTB AntiScam trained transfer classifier
+After=network.target
+
+[Service]
+Type=simple
+User=vtbapp
+Group=vtbapp
+WorkingDirectory=/opt/vtb-antiscam/app
+Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=MKL_NUM_THREADS=1
+ExecStart=/opt/vtb-antiscam/ml-venv/bin/python pipeline/service.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target
