@@ -187,6 +187,18 @@ test('phone alert excludes its originating session and sessions opened after the
   assert.equal((await f.call('/api/action', { action: 'report-security', alertId: 'made-up' }, old.cookie)).status, 403);
 });
 
+test('an older session can confirm a recognized event and remove the warning without locking funds', async () => {
+  const f = fixture(), old = await f.login('client'), source = await f.login('client');
+  const before = (await f.call('/api/state', undefined, old.cookie)).body.state;
+  const alert = before.securityAlerts.find(item => item.kind === 'login'); assert.ok(alert);
+  assert.equal((await f.call('/api/action', { action: 'acknowledge-security', alertId: alert.id }, source.cookie)).status, 403);
+  const confirmed = await f.call('/api/action', { action: 'acknowledge-security', alertId: alert.id }, old.cookie);
+  assert.equal(confirmed.status, 200); assert.equal(confirmed.body.state.securityLock, null);
+  assert.equal(confirmed.body.state.balance, before.balance);
+  assert.equal(confirmed.body.state.securityAlerts.some(item => item.id === alert.id), false);
+  assert.equal(confirmed.body.state.events.some(event => event.type === 'security-acknowledged'), false);
+});
+
 test('recovery alert available only in the other pre-existing session', async () => {
   const f = fixture(), old = await f.login('client'), origin = await f.login('client');
   await f.call('/api/action', { action: 'recovery' }, origin.cookie);

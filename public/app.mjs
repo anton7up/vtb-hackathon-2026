@@ -121,7 +121,7 @@ function renderSecurityAlerts() {
     target.innerHTML = `<article class="security-alert urgent"><div class="security-alert-heading">${icon('alert')}<h2>${ui.role === 'employee' ? 'Срочная тревога: возможный захват аккаунта' : 'Сообщение принято. Деньги под защитой'}</h2></div><p>Клиент не признал событие: <b>${esc(state.securityLock.eventText)}</b>. ${date(state.securityLock.at)} МСК.</p><p>${ui.role === 'employee' ? 'Создано срочное обращение в разделе «Операции». Проверьте события и свяжитесь с клиентом по ранее проверенному каналу. Ответ на обращение не разблокирует счёт.' : 'Другие сессии завершены. В банк отправлено срочное обращение — ответ появится в истории. Свяжитесь с банком по проверенному каналу; не используйте номер из подозрительного сообщения.'}</p></article>`;
     return;
   }
-  target.innerHTML = alerts.slice(0, 3).map(a => `<article class="security-alert"><div class="security-alert-heading">${icon('alert')}<h2>${esc(a.text)}</h2></div><p>${date(a.at)} МСК. Если вы не совершали это действие, сообщите банку.</p><p class="old-session-note">Это предупреждение отображается только в старых сессиях — открытых до события. В сессии, где выполнено действие, кнопки нет.</p><button type="button" class="button danger" data-report-security="${esc(a.id)}">Это был не я</button></article>`).join('');
+  target.innerHTML = alerts.slice(0, 3).map(a => `<article class="security-alert"><div class="security-alert-heading">${icon('alert')}<h2>${esc(a.text)}</h2></div><p>${date(a.at)} МСК. Подтвердите действие или сообщите банку, если совершили его не вы.</p><p class="old-session-note">Это предупреждение отображается только в старых сессиях — открытых до события. В сессии, где выполнено действие, кнопки нет.</p><div class="security-alert-actions"><button type="button" class="button secondary" data-acknowledge-security="${esc(a.id)}">Это был я</button><button type="button" class="button danger" data-report-security="${esc(a.id)}">Это был не я</button></div></article>`).join('');
 }
 function tick() {
   const remaining = protectionOf(state, now()).remainingMs;
@@ -201,7 +201,7 @@ function render() {
   if (state.securityLock && $('.balance-bottom span')) $('.balance-bottom span').textContent = 'Демо-баланс · списания заблокированы';
   if (ui.page === 'security' && !state.securityLock) $('#workspace').insertAdjacentHTML('afterbegin', '<p class="notice">Предупреждение «Это был не я» отображается только в старых сессиях — открытых до нового входа или изменения данных. В сессии, совершившей действие, кнопки нет.</p>');
   updateRecipientInfo();
-  if (ui.role === 'employee' && ui.page === 'cases') $('#workspace').insertAdjacentHTML('afterbegin', '<p class="notice">Три получателя «Тест · …» имеют фиксированные классы независимо от режима ниже. Для остальных получателей работает выбранный режим заглушки.</p>');
+  if (ui.role === 'employee' && ui.page === 'cases' && !transferClassifierConfig?.configured) $('#workspace').insertAdjacentHTML('afterbegin', '<p class="notice">Три получателя «Тест · …» имеют фиксированные классы независимо от режима ниже. Для остальных получателей работает выбранный режим заглушки.</p>');
   if (ui.role === 'employee' && $('#staff-client')) $('#workspace').prepend($('#staff-client').closest('.staff-client-picker'));
   if (ui.aiModalOperationId && $('#dialog').open) renderAssistantDialog();
   if (ui.role === 'client') document.querySelectorAll('[data-resume-reviewed]').forEach(button => {
@@ -582,6 +582,11 @@ document.addEventListener('click', async e => {
       const alert = state.securityAlerts?.find(a => a.id === b.dataset.reportSecurity);
       if (!alert) return;
       showDialog('Это действие совершили не вы?', `<p>${esc(alert.text)} · ${date(alert.at)} МСК.</p><p>Будут заблокированы все переводы и снятие наличных, включая прежних получателей. Другие сессии завершатся. Сотрудник банка получит срочную тревогу.</p><p>Блокировка не снимается через 24 часа. Кнопка доступна только в старой сессии, открытой до события.</p><div class="dialog-actions"><button type="button" class="button subtle" data-close>Отмена</button><button type="button" class="button danger" data-confirm-security="${esc(alert.id)}">Заблокировать операции</button></div>`, 'alert', 'red');
+    }
+    if (b.dataset.acknowledgeSecurity) {
+      b.disabled = true;
+      try { await action('acknowledge-security', { alertId: b.dataset.acknowledgeSecurity }); toast('Событие подтверждено. Предупреждение закрыто.'); }
+      finally { b.disabled = false; }
     }
     if (b.dataset.confirmSecurity) {
       b.disabled = true;
