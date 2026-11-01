@@ -19,7 +19,13 @@ if (!['127.0.0.1', 'localhost', '::1'].includes(host) && !process.env.PUBLIC_ORI
 const databasePath = resolve(root, process.env.DATABASE_PATH || 'data/antiscam.sqlite');
 const db = openDatabase(databasePath);
 const inspector = createInspector({ loader: process.env.SCANNER_LOADER || 'browser', dns: process.env.SCANNER_DNS || 'cloudflare', executablePath: process.env.SCANNER_BROWSER_PATH });
-const server = createAppServer({ db, runtime: { GROQ_API_KEY: process.env.GROQ_API_KEY, inspectWebsite: inspector, cbrWarning: createCbrWarningService() }, publicOrigin: process.env.PUBLIC_ORIGIN });
+const server = createAppServer({ db, runtime: {
+  GROQ_API_KEY: process.env.GROQ_API_KEY,
+  GROQ_API_URL: process.env.GROQ_API_URL,
+  GROQ_RELAY_TOKEN: process.env.GROQ_RELAY_TOKEN,
+  inspectWebsite: inspector,
+  cbrWarning: createCbrWarningService(),
+}, publicOrigin: process.env.PUBLIC_ORIGIN });
 server.once('error', error => { console.error(error.code === 'EADDRINUSE' ? `Port ${port} is already in use. Choose --port.` : 'Cannot start local server'); db.close(); process.exitCode = 1; });
 server.listen(port, host, () => {
   console.log(`АнтиСкам: http://${host === '::1' ? '[::1]' : host}:${port}`);
