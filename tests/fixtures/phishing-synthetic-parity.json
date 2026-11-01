@@ -1,0 +1,97 @@
+[
+  {
+    "url": "https://shop.example/",
+    "label": "phishing",
+    "phishing_score": 0.9948070084399152
+  },
+  {
+    "url": "https://SHOP.EXAMPLE/Login?A=B",
+    "label": "phishing",
+    "phishing_score": 0.9980138672846002
+  },
+  {
+    "url": "https://bank-login.example/confirm?account=test",
+    "label": "phishing",
+    "phishing_score": 0.9976605001958866
+  },
+  {
+    "url": "http://192.0.2.1/login",
+    "label": "phishing",
+    "phishing_score": 0.999999620928881
+  },
+  {
+    "url": "https://\u043f\u0440\u0438\u043c\u0435\u0440.\u0440\u0444/\u043e\u043f\u043b\u0430\u0442\u0430",
+    "label": "safe",
+    "phishing_score": 0.0008048783567775608
+  },
+  {
+    "url": "https://example.com/\ud83d\ude00/\u0130/\u039f\u03a3",
+    "label": "phishing",
+    "phishing_score": 0.998583413919191
+  },
+  {
+    "url": "https://example.com/?q=\u00e4\u00f6\u00fc",
+    "label": "phishing",
+    "phishing_score": 0.9984994542141445
+  },
+  {
+    "url": "https://example.com/#fragment",
+    "label": "phishing",
+    "phishing_score": 0.9981075926577853
+  },
+  {
+    "url": "https://example.com/a%20b",
+    "label": "phishing",
+    "phishing_score": 0.9987033495702776
+  },
+  {
+    "url": "https://example.com/a+b",
+    "label": "phishing",
+    "phishing_score": 0.9987453168676275
+  },
+  {
+    "url": "https://example.com/\u001c\u001d",
+    "label": "phishing",
+    "phishing_score": 0.9997337540648602
+  },
+  {
+    "url": "https://example.com/\u00a0\t\npath",
+    "label": "phishing",
+    "phishing_score": 0.9996666923395987
+  },
+  {
+    "url": "https://example.com/\u2003\u202fpath",
+    "label": "phishing",
+    "phishing_score": 0.9996666923395987
+  },
+  {
+    "url": "https://example.com/\ufeffpath",
+    "label": "phishing",
+    "phishing_score": 0.9983212327307271
+  },
+  {
+    "url": "",
+    "label": "phishing",
+    "phishing_score": 0.9873742713926293
+  },
+  {
+    "url": "a",
+    "label": "phishing",
+    "phishing_score": 0.9873742713926293
+  },
+  {
+    "url": "A B",
+    "label": "phishing",
+    "phishing_score": 0.9873742713926293
+  },
+  {
+    "url": " \t\n ",
+    "label": "phishing",
+    "phishing_score": 0.9873742713926293
+  },
+  {
+    "url": "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "label": "phishing",
+    "phishing_score": 0.9907970070819094
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "version": "hackathon-2026-10-29",
+  "note": "Неполный справочник. Совпадение домена не гарантирует безопасность; отсутствие не доказывает подделку.",
+  "brands": [
+    {"name":"ВТБ","aliases":["втб","vtb"],"domains":["vtb.ru","vtb.com","vtb24.ru","vtb.promo"],"source":"https://www.cbr.ru/banking_sector/credit/cowebsites/"},
+    {"name":"Сбер","aliases":["сбербанк","сбер","sberbank","sber"],"domains":["sberbank.ru","sberbank.com","sber.ru","sbrf.ru"],"source":"https://www.cbr.ru/banking_sector/credit/cowebsites/"},
+    {"name":"Ozon","aliases":["ozon","озон"],"domains":["ozon.ru"],"source":"https://www.ozon.ru/"},
+    {"name":"Wildberries","aliases":["wildberries","вайлдберриз","в wildberries"],"domains":["wildberries.ru"],"source":"https://www.wildberries.ru/"},
+    {"name":"adidas","aliases":["adidas","адидас"],"domains":["adidas.com","adidas.be"],"source":"https://www.adidas.com/"}
+  ],
+  "paymentDomains": ["yookassa.ru","cloudpayments.ru"],
+  "paymentSources": ["https://yookassa.ru/developers/payment-acceptance/getting-started/payment-process","https://developers.cloudpayments.ru/"]
+}

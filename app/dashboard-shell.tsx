@@ -16,7 +16,7 @@ export default function DashboardShell({ user }: { user: { role: string; name: s
         <section className="protection-banner" id="protection-banner" aria-label="Статус защитной паузы"></section>
         <section id="security-alerts" aria-label="Предупреждения безопасности" aria-live="polite" hidden></section>
         <div id="workspace"><p className="empty">Загружаем данные аккаунта…</p></div>
-        <footer>Учебный прототип. Деньги, получатели и реестр вымышлены. 24 часа — правило демо.<span>Вы вошли как {employee ? 'сотрудник банка' : 'клиент'}. Доступ к данным проверяется сервером.</span></footer>
+        <footer>Учебный прототип. Деньги, получатели и банковский реестр вымышлены. Список ЦБ — отдельный открытый источник. 24 часа — правило демо.<span>Вы вошли как {employee ? 'сотрудник банка' : 'клиент'}. Доступ к данным проверяется сервером.</span></footer>
       </main>
     </div>
     <dialog id="dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>

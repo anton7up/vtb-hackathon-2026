@@ -21,3 +21,11 @@ export const loginLimits = sqliteTable('login_limits', {
   key: text('key').primaryKey(), attempts: integer('attempts').notNull().default(0),
   windowStart: integer('window_start').notNull(),
 });
+export const complaintIndex = sqliteTable('complaint_index', {
+  reportId: text('report_id').primaryKey(), clientId: text('client_id').notNull(),
+  recipientId: text('recipient_id').notNull(), recipientName: text('recipient_name').notNull(),
+  status: text('status').notNull(), updatedAt: integer('updated_at').notNull(),
+});
+export const registryVersion = sqliteTable('registry_version', {
+  id: text('id').primaryKey(), revision: integer('revision').notNull().default(0),
+});

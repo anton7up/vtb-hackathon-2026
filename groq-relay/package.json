@@ -1,0 +1,9 @@
+{
+  "name": "vtb-antiscam-groq-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

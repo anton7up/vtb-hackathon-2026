@@ -1,0 +1,10 @@
+.recovery-panel { border-top: 3px solid #e6a12b; }
+.recovery-panel form { margin-top: 16px; }
+.recovery-panel input[type="password"], .recovery-panel textarea { width: 100%; }
+.recovery-panel fieldset { margin: 0; padding: 16px; border: 1px solid #d8e1ef; border-radius: 14px; min-width: 0; }
+.recovery-panel legend { font-weight: 700; padding: 0 6px; }
+.recovery-panel fieldset > label:not(.field-label) { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0; line-height: 1.5; }
+.recovery-panel input[type="checkbox"] { flex: 0 0 auto; margin-top: 5px; }
+.recovery-panel textarea { min-height: 105px; resize: vertical; }
+.recovery-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+@media (max-width: 600px) { .recovery-actions .button { width: 100%; } }
