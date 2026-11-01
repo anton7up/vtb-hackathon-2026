@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { bankApi } from '../lib/bank-api.mjs';
-import { normalizeClassification } from '../lib/transfer-classifier.mjs';
+import { normalizeClassification, TRANSFER_MODEL_FEATURES } from '../lib/transfer-classifier.mjs';
 
 function fixture(runtime = {}) {
   const sql = new DatabaseSync(':memory:');
@@ -308,6 +308,24 @@ async function modelFixture(mode) {
 test('model contract accepts exactly three named classes and rejects malformed responses', () => {
   for (const cls of ['normal', 'review', 'block']) assert.equal(normalizeClassification({ class: cls, model_version: 'v1' }).class, cls);
   for (const raw of [null, {}, { class: 'safe', model_version: 'v1' }, { class: 0, model_version: 'v1' }, { class: 'normal' }, { class: 'normal', model_version: '' }]) assert.equal(normalizeClassification(raw), null);
+});
+
+test('trained transfer model receives shared DB history and persists its full auditable snapshot', async () => {
+  let modelRequest;
+  const features = Object.fromEntries(TRANSFER_MODEL_FEATURES.map((name, index) => [name, index + 0.25]));
+  const runtime = { TRANSFER_MODEL_URL: 'http://127.0.0.1:8101/v1/classify', transferModelFetch: async (_url, options) => {
+    modelRequest = JSON.parse(options.body);
+    return new Response(JSON.stringify({ decision: 1, p_fraud: 0.31, model_version: 'fraud-hgb-audit', thresholds: { review: 0.14, block: 0.46 }, features }), { status: 200 });
+  } };
+  const f = fixture(runtime), client = await f.login('client');
+  const result = await f.call('/api/action', { action: 'attempt', kind: 'transfer', recipientId: 'DEMO-NEW-001', amount: 500000, requestId: 'trained-ledger-request' }, client.cookie);
+  assert.equal(result.status, 200); assert.equal(result.body.classification.class, 'review');
+  assert.deepEqual(new Set(modelRequest.history.map(row => row.sender_id)), new Set(['client-demo', 'client-demo-2', 'client-demo-3']));
+  const row = f.sql.prepare('SELECT * FROM transfer_ledger WHERE client_id = ? AND request_id = ?').get('client-demo', 'trained-ledger-request');
+  assert.equal(row.sender_balance_before_kopecks, 24830000); assert.equal(row.amount_kopecks, 500000);
+  assert.equal(row.model_class, 'review'); assert.equal(row.model_probability, 0.31); assert.equal(row.model_version, 'fraud-hgb-audit');
+  assert.equal(row.threshold_review, 0.14); assert.equal(row.threshold_block, 0.46);
+  assert.deepEqual(JSON.parse(row.feature_snapshot_json), features);
 });
 
 test('normal class requires confirmation; role and model verdict cannot be spoofed by client', async () => {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyTransfer, transferModelPayload } from '../lib/transfer-classifier.mjs';
+import { classifyTransfer, transferModelPayload, TRANSFER_MODEL_FEATURES } from '../lib/transfer-classifier.mjs';
 
 const now = Date.parse('2026-11-01T15:00:00Z');
 const state = { balance: 24830000, operations: [
@@ -21,10 +21,11 @@ test('trained service decision maps 0/1/2 to normal/review/block with ML metadat
     let sent;
     const runtime = { TRANSFER_MODEL_URL: 'http://127.0.0.1:8101/v1/classify', transferModelFetch: async (url, options) => {
       sent = { url, body: JSON.parse(options.body) };
-      return new Response(JSON.stringify({ decision, p_fraud: decision / 2, model_version: 'fraud-hgb-test' }), { status: 200 });
+      return new Response(JSON.stringify({ decision, p_fraud: decision / 2, model_version: 'fraud-hgb-test', thresholds: { review: 0.14, block: 0.46 }, features: Object.fromEntries(TRANSFER_MODEL_FEATURES.map((name, index) => [name, index])) }), { status: 200 });
     } };
     const result = await classifyTransfer(state, request, now, runtime, 'client-demo-2');
     assert.equal(result.class, expected); assert.equal(result.source, 'ml'); assert.equal(result.model_version, 'fraud-hgb-test');
+    assert.equal(result.model_features.receiver_tx_before, 11); assert.deepEqual(result.thresholds, { review: 0.14, block: 0.46 });
     assert.equal(sent.url, runtime.TRANSFER_MODEL_URL); assert.equal(sent.body.operation.sender_id, 'client-demo-2');
   }
 });

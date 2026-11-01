@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from features import INPUT_COLUMNS
-from predict_example import MODEL_PATH, load_artifacts, score_new_operation
+from features import FEATURES, INPUT_COLUMNS, add_features, feature_matrix
+from predict_example import MODEL_PATH, load_artifacts
 
 MAX_BODY = 2 * 1024 * 1024
 MAX_HISTORY = 10_000
@@ -59,14 +59,23 @@ def classify(payload: dict) -> dict:
     operation = _row(payload["operation"])
     history_rows = [_row(item) for item in history_input]
     history = pd.DataFrame(history_rows, columns=INPUT_COLUMNS)
-    probability, decision = score_new_operation(
-        operation, history, MODEL, T_REVIEW, T_BLOCK
-    )
+    current = pd.DataFrame([{**operation, "_current": True}])
+    history["_current"] = False
+    combined = current if history.empty else pd.concat([history[INPUT_COLUMNS + ["_current"]], current], ignore_index=True)
+    combined["timestamp"] = pd.to_datetime(combined["timestamp"])
+    combined = combined.sort_values(["timestamp", "_current"], kind="stable").reset_index(drop=True)
+    scored = add_features(combined)
+    last = scored.loc[scored["_current"]].iloc[[-1]]
+    probability = float(MODEL.predict_proba(feature_matrix(last))[0, 1])
+    if not math.isfinite(probability):
+        raise ValueError("invalid_probability")
+    decision = 0 if probability < T_REVIEW else 1 if probability < T_BLOCK else 2
     return {
         "decision": decision,
         "p_fraud": probability,
         "model_version": MODEL_VERSION,
         "thresholds": {"review": T_REVIEW, "block": T_BLOCK},
+        "features": {name: float(last.iloc[0][name]) for name in FEATURES},
     }
 
 
